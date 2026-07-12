@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>真理斗僵尸 · ZOMBIE STRIKE</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    /* ---------- HUD ---------- */
+    #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+    #hud.active { display: block; }
+
+    #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; }
+    #crosshair .c-line { position: absolute; background: rgba(0, 255, 140, 0.9); box-shadow: 0 0 4px rgba(0,255,140,.8); transition: all .06s; }
+    #crosshair .c-t { left: 11px; top: 0;    width: 2px; height: 7px; }
+    #crosshair .c-b { left: 11px; bottom: 0; width: 2px; height: 7px; }
+    #crosshair .c-l { top: 11px; left: 0;    width: 7px; height: 2px; }
+    #crosshair .c-r { top: 11px; right: 0;   width: 7px; height: 2px; }
+    #crosshair.hit .c-line { background: #ff3b3b; box-shadow: 0 0 6px #ff3b3b; }
+
+    #hitmarker { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px;
+      transform: translate(-50%, -50%) rotate(45deg); opacity: 0; transition: opacity .12s; }
+    #hitmarker span { position: absolute; background: #fff; box-shadow: 0 0 5px #fff; }
+    #hitmarker .h1 { left: 16px; top: 0; width: 2px; height: 9px; }
+    #hitmarker .h2 { left: 16px; bottom: 0; width: 2px; height: 9px; }
+    #hitmarker .h3 { top: 16px; left: 0; width: 9px; height: 2px; }
+    #hitmarker .h4 { top: 16px; right: 0; width: 9px; height: 2px; }
+    #hitmarker.headshot span { background: #ff3b3b; box-shadow: 0 0 6px #ff3b3b; }
+
+    .panel { position: absolute; color: #e8ffe8; text-shadow: 0 0 6px rgba(0,255,140,.5), 0 2px 3px #000; }
+    #hp-panel { left: 28px; bottom: 24px; display: flex; align-items: center; gap: 12px; }
+    #hp-num { font-size: 44px; font-weight: 800; font-style: italic; min-width: 86px; }
+    #hp-bar-wrap { width: 210px; height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(0,255,140,.4); transform: skewX(-12deg); }
+    #hp-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #00c96b, #7dffb0); transition: width .15s; }
+    #hp-panel.low #hp-num { color: #ff5050; }
+    #hp-panel.low #hp-bar { background: linear-gradient(90deg, #c90000, #ff7050); }
+    #armor-row { font-size: 13px; opacity: .85; margin-top: 4px; letter-spacing: 1px; }
+
+    #ammo-panel { right: 32px; bottom: 24px; text-align: right; }
+    #weapon-name { font-size: 15px; letter-spacing: 3px; opacity: .9; margin-bottom: 2px; }
+    #ammo-num { font-size: 48px; font-weight: 800; font-style: italic; line-height: 1; }
+    #ammo-num small { font-size: 22px; opacity: .75; font-weight: 600; }
+    #ammo-panel.empty #ammo-num { color: #ff5050; animation: blink .5s infinite; }
+    @keyframes blink { 50% { opacity: .35; } }
+    #reload-tip { font-size: 14px; color: #ffd24d; margin-top: 4px; opacity: 0; }
+    #reload-tip.show { opacity: 1; animation: blink .6s infinite; }
+    #weapon-slots { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; font-size: 12px; }
+    .wslot { padding: 3px 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.45); color: #aaa; }
+    .wslot.on { border-color: rgba(0,255,140,.8); color: #baffd6; background: rgba(0,60,30,.5); }
+
+    /* 火符技能 */
+    #skill-panel { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); text-align: center; }
+    #skill-icon { width: 54px; height: 54px; border: 2px solid rgba(255,180,60,.7); background: rgba(30,15,0,.6);
+      display: flex; align-items: center; justify-content: center; font-size: 28px; position: relative; overflow: hidden; margin: 0 auto; }
+    #skill-cd { position: absolute; left: 0; bottom: 0; width: 100%; background: rgba(0,0,0,.75); height: 0%; }
+    #skill-panel .skill-key { font-size: 12px; color: #ffd9a0; margin-top: 4px; letter-spacing: 1px; }
+    #skill-icon.ready { box-shadow: 0 0 14px rgba(255,160,40,.7); }
+
+    #top-panel { top: 20px; left: 50%; transform: translateX(-50%); text-align: center; }
+    #level-label { font-size: 15px; letter-spacing: 4px; color: #9fdcb5; }
+    #wave-num { font-size: 26px; font-weight: 800; color: #ffce54; text-shadow: 0 0 10px rgba(255,190,60,.6), 0 2px 3px #000; }
+    #zombies-left { font-size: 14px; margin-top: 2px; color: #ffb0b0; letter-spacing: 2px; }
+
+    /* BOSS 血条 */
+    #boss-bar-wrap { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: 46%;
+      display: none; text-align: center; }
+    #boss-bar-wrap.show { display: block; }
+    #boss-name { font-size: 16px; letter-spacing: 8px; color: #ff8a7a; text-shadow: 0 0 12px rgba(255,60,40,.7); margin-bottom: 4px; }
+    #boss-bar-bg { height: 14px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,90,70,.6); }
+    #boss-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #a01010, #ff5040); transition: width .12s; }
+
+    #score-panel { top: 20px; right: 28px; text-align: right; font-size: 14px; letter-spacing: 1px; }
+    #score-panel b { font-size: 24px; color: #ffce54; }
+    #yangqi-hud { color: #ffd9a0; }
+
+    #killfeed { top: 100px; right: 28px; text-align: right; font-size: 13px; }
+    .kf-item { margin-top: 4px; color: #ffd7d7; background: rgba(0,0,0,.4); padding: 2px 8px; opacity: .95; }
+    .kf-item b { color: #ff6d6d; }
+
+    #view-hint { position: absolute; left: 28px; top: 20px; font-size: 13px; color: #9ab; letter-spacing: 1px; }
+
+    #wave-banner { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%);
+      font-size: 52px; font-weight: 900; color: #ffce54; letter-spacing: 10px;
+      text-shadow: 0 0 24px rgba(255,150,0,.8), 0 3px 5px #000; opacity: 0; transition: opacity .3s; text-align: center; }
+    #wave-banner small { display: block; font-size: 18px; letter-spacing: 6px; color: #fff; margin-top: 8px; font-weight: 500; }
+
+    #dmg-overlay { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+      background: radial-gradient(ellipse at center, transparent 40%, rgba(160,0,0,.65) 100%); transition: opacity .1s; }
+    #lowhp-overlay { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+      background: radial-gradient(ellipse at center, transparent 45%, rgba(120,0,0,.55) 100%);
+      animation: pulse 1.2s infinite; display: none; }
+    #lowhp-overlay.show { display: block; }
+    @keyframes pulse { 0%,100% { opacity: .25; } 50% { opacity: .7; } }
+    #burn-overlay { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(200,80,0,.4) 100%); }
+
+    /* ---------- 全屏界面通用 ---------- */
+    .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 50% 30%, #16261b 0%, #050a07 70%); color: #dfe; z-index: 10; }
+    .screen.hidden { display: none; }
+    .btn { font-size: 18px; color: #ffd24d; cursor: pointer; pointer-events: auto;
+      border: 1px solid rgba(255,210,77,.5); padding: 12px 42px; letter-spacing: 6px;
+      background: rgba(60,40,0,.25); transition: all .2s; }
+    .btn:hover { background: rgba(255,210,77,.15); box-shadow: 0 0 20px rgba(255,210,77,.3); }
+    .btn.secondary { color: #9fdcb5; border-color: rgba(120,220,160,.4); background: rgba(0,40,20,.25); }
+    .btn.small { font-size: 14px; padding: 8px 24px; letter-spacing: 3px; }
+    .back-btn { position: absolute; top: 26px; left: 30px; }
+
+    /* 主菜单 */
+    #title-cn { font-size: 72px; font-weight: 900; letter-spacing: 14px; color: #e8fff0;
+      text-shadow: 0 0 30px rgba(0,255,140,.45), 0 4px 0 #052, 0 8px 20px #000; }
+    #title-en { font-size: 20px; letter-spacing: 16px; color: #6fdd9b; margin-top: 10px; }
+    .divider { width: 420px; height: 1px; background: linear-gradient(90deg, transparent, #3f8f5f, transparent); margin: 30px 0; }
+    #menu-buttons { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+    #loading-status { margin-top: 26px; font-size: 14px; color: #6fdd9b; letter-spacing: 2px; }
+    #menu-yangqi { margin-top: 18px; font-size: 15px; color: #ffd9a0; letter-spacing: 2px; }
+
+    /* 关卡选择 */
+    #level-screen { background: radial-gradient(ellipse at 50% 25%, #101826 0%, #04060a 70%); }
+    #level-screen h2, #upgrade-screen h2 { font-size: 34px; letter-spacing: 12px; color: #e8fff0; margin-bottom: 34px;
+      text-shadow: 0 0 20px rgba(120,180,255,.4); }
+    #level-grid { display: grid; grid-template-columns: repeat(4, 200px); gap: 18px; }
+    .level-card { pointer-events: auto; cursor: pointer; border: 1px solid #3a4a5a; background: rgba(10,18,28,.75);
+      padding: 18px 16px; transition: all .18s; position: relative; }
+    .level-card:hover { border-color: #ffd24d; background: rgba(40,34,10,.6); transform: translateY(-3px); }
+    .level-card.locked { opacity: .38; cursor: not-allowed; filter: grayscale(.8); }
+    .level-card.locked:hover { border-color: #3a4a5a; transform: none; background: rgba(10,18,28,.75); }
+    .level-card .lv-num { font-size: 13px; color: #7f95a8; letter-spacing: 2px; }
+    .level-card .lv-name { font-size: 19px; color: #ffe9c9; margin: 6px 0; letter-spacing: 2px; }
+    .level-card .lv-stars { color: #ffce54; font-size: 13px; letter-spacing: 3px; }
+    .level-card .lv-lock { position: absolute; right: 12px; top: 12px; font-size: 18px; }
+
+    /* 修行 */
+    #upgrade-screen { background: radial-gradient(ellipse at 50% 25%, #26180e 0%, #0a0504 70%); }
+    #upgrade-list { display: flex; flex-direction: column; gap: 14px; width: 560px; }
+    .up-row { pointer-events: auto; display: flex; align-items: center; gap: 16px; border: 1px solid #5a4028;
+      background: rgba(30,20,10,.7); padding: 14px 20px; }
+    .up-row .up-icon { font-size: 30px; width: 46px; text-align: center; }
+    .up-row .up-info { flex: 1; }
+    .up-row .up-name { font-size: 18px; color: #ffe9c9; letter-spacing: 2px; }
+    .up-row .up-desc { font-size: 13px; color: #b8a58c; margin-top: 3px; }
+    .up-row .up-pips { margin-top: 5px; letter-spacing: 3px; font-size: 12px; color: #ffce54; }
+    .up-buy { pointer-events: auto; cursor: pointer; border: 1px solid rgba(255,210,77,.5); color: #ffd24d;
+      background: rgba(60,40,0,.3); padding: 8px 18px; font-size: 14px; letter-spacing: 1px; min-width: 120px; text-align: center; }
+    .up-buy:hover { background: rgba(255,210,77,.18); }
+    .up-buy.disabled { opacity: .4; cursor: not-allowed; }
+    #upgrade-yangqi { margin-bottom: 24px; font-size: 18px; color: #ffd9a0; letter-spacing: 2px; }
+
+    /* 图鉴 */
+    #codex-ui { position: fixed; inset: 0; pointer-events: none; z-index: 9; display: none; }
+    #codex-ui.active { display: block; }
+    #codex-title { position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+      font-size: 26px; letter-spacing: 14px; color: #e8d9b0; text-shadow: 0 0 16px rgba(255,200,120,.4); }
+    #codex-panel { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%);
+      width: 640px; background: rgba(8,6,4,.82); border: 1px solid #6a5432; padding: 20px 28px; color: #e8dcc0; }
+    #codex-name { font-size: 26px; letter-spacing: 6px; color: #ffe9c9; }
+    #codex-name small { font-size: 14px; color: #c8a86a; margin-left: 14px; letter-spacing: 3px; }
+    #codex-lore { margin-top: 10px; font-size: 14.5px; line-height: 1.85; color: #d5c8ac; }
+    #codex-stats { margin-top: 10px; font-size: 13px; color: #a8b8a0; letter-spacing: 1px; display: flex; gap: 22px; }
+    #codex-stats b { color: #ffce54; }
+    #codex-nav { position: absolute; left: 50%; bottom: 232px; transform: translateX(-50%); display: flex; gap: 420px; }
+    .codex-arrow { pointer-events: auto; cursor: pointer; font-size: 40px; color: #c8a86a; padding: 6px 16px;
+      text-shadow: 0 0 10px rgba(255,200,120,.4); }
+    .codex-arrow:hover { color: #ffe9c9; }
+    #codex-back { position: absolute; top: 26px; left: 30px; pointer-events: auto; }
+    #codex-tip { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); font-size: 13px; color: #8a7a5a; letter-spacing: 2px; }
+
+    /* 剧情卡 */
+    #story-screen { background: rgba(0,0,0,.88); }
+    #story-box { width: 620px; border: 1px solid #4a5a48; background: rgba(8,12,8,.9); padding: 40px 46px; }
+    #story-level { font-size: 15px; color: #9fdcb5; letter-spacing: 5px; }
+    #story-name { font-size: 32px; color: #ffe9c9; letter-spacing: 6px; margin: 12px 0 22px; }
+    #story-text { font-size: 16px; line-height: 2.1; color: #cfd8c0; white-space: pre-line; }
+    #story-go { margin-top: 34px; text-align: center; }
+
+    /* 结算 */
+    #gameover-screen { background: radial-gradient(ellipse at 50% 30%, #2a0f0f 0%, #070303 70%); }
+    #go-title { font-size: 64px; font-weight: 900; color: #ff4444; letter-spacing: 12px; text-shadow: 0 0 40px rgba(255,0,0,.5), 0 4px 0 #400; }
+    #victory-screen { background: radial-gradient(ellipse at 50% 30%, #2a230b 0%, #070503 70%); }
+    #vc-title { font-size: 58px; font-weight: 900; color: #ffd24d; letter-spacing: 12px; text-shadow: 0 0 40px rgba(255,190,40,.5); }
+    .result-stats { margin-top: 28px; font-size: 17px; line-height: 2.2; color: #ecc; text-align: center; letter-spacing: 2px; }
+    .result-stats b { color: #ffce54; font-size: 24px; }
+    .result-btns { margin-top: 36px; display: flex; gap: 18px; }
+
+    #pause-hint { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 9;
+      color: #fff; font-size: 22px; letter-spacing: 4px; text-shadow: 0 2px 8px #000;
+      background: rgba(0,0,0,.6); padding: 20px 50px; border: 1px solid #444; display: none; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="crosshair">
+      <div class="c-line c-t"></div><div class="c-line c-b"></div>
+      <div class="c-line c-l"></div><div class="c-line c-r"></div>
+    </div>
+    <div id="hitmarker"><span class="h1"></span><span class="h2"></span><span class="h3"></span><span class="h4"></span></div>
+
+    <div class="panel" id="top-panel">
+      <div id="level-label">第 1 关</div>
+      <div id="wave-num">1 / 3 波</div>
+      <div id="zombies-left">僵尸剩余 0</div>
+    </div>
+
+    <div id="boss-bar-wrap">
+      <div id="boss-name">犼 · 僵尸之王</div>
+      <div id="boss-bar-bg"><div id="boss-bar"></div></div>
+    </div>
+
+    <div class="panel" id="score-panel">
+      分数 <b id="score-num">0</b><br/>
+      击杀 <span id="kill-num">0</span><br/>
+      <span id="yangqi-hud">阳气 0</span>
+    </div>
+    <div class="panel" id="killfeed"></div>
+    <div class="panel" id="view-hint">V 切换视角 · 右键掷火符</div>
+
+    <div class="panel" id="hp-panel">
+      <div id="hp-num">100</div>
+      <div>
+        <div id="hp-bar-wrap"><div id="hp-bar"></div></div>
+        <div id="armor-row">生命值 HP</div>
+      </div>
+    </div>
+
+    <div class="panel" id="skill-panel">
+      <div id="skill-icon">🔥<div id="skill-cd"></div></div>
+      <div class="skill-key">火符 · 右键</div>
+    </div>
+
+    <div class="panel" id="ammo-panel">
+      <div id="weapon-name">AK-47</div>
+      <div id="ammo-num">30 <small>/ 240</small></div>
+      <div id="reload-tip">按 R 换弹</div>
+      <div id="weapon-slots">
+        <div class="wslot on" data-slot="0">1 AK-47</div>
+        <div class="wslot" data-slot="1">2 加特林</div>
+        <div class="wslot" data-slot="2">3 霰弹</div>
+        <div class="wslot" data-slot="3">4 冲锋枪</div>
+        <div class="wslot" data-slot="4">5 手枪</div>
+        <div class="wslot" data-slot="5">6 军刀</div>
+      </div>
+    </div>
+
+    <div id="wave-banner"></div>
+    <div id="dmg-overlay"></div>
+    <div id="burn-overlay"></div>
+    <div id="lowhp-overlay"></div>
+  </div>
+
+  <!-- 主菜单 -->
+  <div class="screen" id="menu-screen">
+    <div id="title-cn">真理斗僵尸</div>
+    <div id="title-en">ZOMBIE · STRIKE</div>
+    <div class="divider"></div>
+    <div id="menu-buttons">
+      <div class="btn" id="btn-battle">出 战</div>
+      <div class="btn secondary" id="btn-codex">僵 尸 图 鉴</div>
+      <div class="btn secondary" id="btn-upgrade">道 长 修 行</div>
+    </div>
+    <div id="menu-yangqi">阳气 0</div>
+    <div id="loading-status">正在加载资源…</div>
+  </div>
+
+  <!-- 关卡选择 -->
+  <div class="screen hidden" id="level-screen">
+    <div class="btn small secondary back-btn" data-back>← 返回</div>
+    <h2>选 择 关 卡</h2>
+    <div id="level-grid"></div>
+  </div>
+
+  <!-- 修行 -->
+  <div class="screen hidden" id="upgrade-screen">
+    <div class="btn small secondary back-btn" data-back>← 返回</div>
+    <h2>道 长 修 行</h2>
+    <div id="upgrade-yangqi">阳气 0</div>
+    <div id="upgrade-list"></div>
+  </div>
+
+  <!-- 图鉴 UI 覆盖层 -->
+  <div id="codex-ui">
+    <div id="codex-title">僵 尸 图 鉴</div>
+    <div id="codex-tip">点击棺中之物查看 · ←/→ 切换</div>
+    <div class="btn small secondary" id="codex-back">← 返回</div>
+    <div id="codex-nav">
+      <div class="codex-arrow" id="codex-prev">‹</div>
+      <div class="codex-arrow" id="codex-next">›</div>
+    </div>
+    <div id="codex-panel">
+      <div id="codex-name">紫僵 <small>淤血初变</small></div>
+      <div id="codex-lore"></div>
+      <div id="codex-stats"></div>
+    </div>
+  </div>
+
+  <!-- 关前剧情 -->
+  <div class="screen hidden" id="story-screen">
+    <div id="story-box">
+      <div id="story-level">第 1 关</div>
+      <div id="story-name">乱葬岗 · 尸动</div>
+      <div id="story-text"></div>
+      <div id="story-go"><div class="btn" id="story-start">开 始 除 祟</div></div>
+    </div>
+  </div>
+
+  <!-- 战败 -->
+  <div class="screen hidden" id="gameover-screen">
+    <div id="go-title">道 长 阵 亡</div>
+    <div class="result-stats" id="go-stats"></div>
+    <div class="result-btns">
+      <div class="btn" id="go-retry">再 战</div>
+      <div class="btn secondary" id="go-back">回 义 庄</div>
+    </div>
+  </div>
+
+  <!-- 通关 -->
+  <div class="screen hidden" id="victory-screen">
+    <div id="vc-title">除 祟 功 成</div>
+    <div class="result-stats" id="vc-stats"></div>
+    <div class="result-btns">
+      <div class="btn" id="vc-next">下 一 关</div>
+      <div class="btn secondary" id="vc-back">回 义 庄</div>
+    </div>
+  </div>
+
+  <div id="pause-hint">已暂停 · 点击继续</div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
