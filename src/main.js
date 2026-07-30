@@ -73,9 +73,9 @@ class Game {
       this.hud.setLoading('正在加载武器与道长…');
       const loader = new GLTFLoader();
       const [shaun, sam, matt] = await Promise.all([
-        loader.loadAsync('/models/Characters_Shaun_SingleWeapon.gltf'),
-        loader.loadAsync('/models/Characters_Sam_SingleWeapon.gltf'),
-        loader.loadAsync('/models/Characters_Matt_SingleWeapon.gltf'),
+        loader.loadAsync('models/Characters_Shaun_SingleWeapon.gltf'),
+        loader.loadAsync('models/Characters_Sam_SingleWeapon.gltf'),
+        loader.loadAsync('models/Characters_Matt_SingleWeapon.gltf'),
         this.priest.load(),
       ]);
       const findNode = (root, name) => {

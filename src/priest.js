@@ -14,7 +14,7 @@ export class Priest {
   }
 
   async load() {
-    const gltf = await new GLTFLoader().loadAsync('/models/priest.glb');
+    const gltf = await new GLTFLoader().loadAsync('models/priest.glb');
     const inst = gltf.scene;
     inst.updateMatrixWorld(true);
     const box = new THREE.Box3();
