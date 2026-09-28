@@ -33,4 +33,5 @@ function capturePlugin() {
 
 export default defineConfig({
   plugins: [capturePlugin()],
+  build: { chunkSizeWarningLimit: 1500 },
 });
