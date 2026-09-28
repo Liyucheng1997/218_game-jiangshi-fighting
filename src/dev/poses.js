@@ -1,0 +1,21 @@
+import * as THREE from 'three';
+import { Priest } from '../priest.js';
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(innerWidth, innerHeight); r.toneMapping = THREE.ACESFilmicToneMapping; r.shadowMap.enabled = true;
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x5a5e64);
+scene.add(new THREE.HemisphereLight(0xdde6ff, 0x3a3228, 1.6));
+const d = new THREE.DirectionalLight(0xffffff, 2.4); d.position.set(3, 6, 5); scene.add(d);
+const q = new URLSearchParams(location.search);
+const yaw = parseFloat(q.get('yaw') || '0.6');
+const ids = ['mauser', 'thompson', 'ak47', 'shotgun', 'gatling', 'sword'];
+ids.forEach((id, i) => {
+  const p = new Priest(scene);
+  p.setVisible(true);
+  p.setWeapon(id);
+  const x = (i - 2.5) * 1.3;
+  p.update(0.016, { pos: new THREE.Vector3(x, 1.65, 0), yaw: yaw + Math.PI, pitch: 0.0, vel: new THREE.Vector3(), running: false, swingT: id === 'sword' ? 0.3 : -1 });
+});
+const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 100);
+cam.position.set(0, 1.5, 9); cam.lookAt(0, 1.2, 0);
+r.render(scene, cam); window.done = true;

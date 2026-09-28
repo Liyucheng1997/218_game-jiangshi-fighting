@@ -3,333 +3,445 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>真理斗僵尸 · ZOMBIE STRIKE</title>
+  <title>真理斗僵尸 · 茅山伏魔录 v1.1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+    :root {
+      --gold: #e8c26a; --gold2: #ffdf8e; --red: #c0282a; --ink: #0b0908; --paper: #efe3c8;
+      --jade: #7fd6a8; --blue: #8ec8ff; --purple: #c8a0ff;
+      --brush: "Ma Shan Zheng", "STXingkai", "KaiTi", "STKaiti", serif;
+      --serif: "Noto Serif SC", "Songti SC", "SimSun", serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: var(--serif); color: var(--paper); }
     #app { position: fixed; inset: 0; }
     canvas { display: block; }
+    .hidden { display: none !important; }
+    button { font-family: inherit; }
 
-    /* ---------- HUD ---------- */
-    #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
-    #hud.active { display: block; }
+    /* ============ 通用按钮 ============ */
+    .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; pointer-events: auto;
+      min-width: 240px; padding: 13px 34px; font-family: var(--serif); font-size: 19px; letter-spacing: 8px; font-weight: 700; color: var(--gold2);
+      background: linear-gradient(180deg, rgba(60,20,12,.85), rgba(24,8,6,.9)); border: 1px solid rgba(232,194,106,.55);
+      box-shadow: inset 0 0 0 3px rgba(0,0,0,.5), inset 0 0 0 4px rgba(232,194,106,.18), 0 6px 20px rgba(0,0,0,.5);
+      transition: transform .15s, box-shadow .2s, color .2s, background .2s; }
+    .btn::before, .btn::after { content: ''; position: absolute; top: 50%; width: 8px; height: 8px; border: 1px solid var(--gold); transform: translateY(-50%) rotate(45deg); background: #2a0c08; }
+    .btn::before { left: -5px; } .btn::after { right: -5px; }
+    .btn:hover { transform: translateY(-2px); color: #fff4d0; background: linear-gradient(180deg, rgba(120,32,18,.95), rgba(50,12,8,.95));
+      box-shadow: inset 0 0 0 3px rgba(0,0,0,.45), inset 0 0 0 4px rgba(255,220,140,.35), 0 0 28px rgba(255,120,40,.35); }
+    .btn.ghost { background: rgba(10,10,12,.55); color: #d8cbb0; border-color: rgba(216,203,176,.3); }
+    .btn.ghost:hover { color: #fff; background: rgba(40,30,20,.7); }
+    .btn.small { min-width: 0; font-size: 14px; padding: 8px 20px; letter-spacing: 3px; }
+    .btn.disabled { opacity: .4; pointer-events: none; }
+    .seal { display: inline-block; font-family: var(--brush); color: #fff; background: var(--red); padding: 2px 8px; border-radius: 3px; transform: rotate(-4deg); box-shadow: 0 0 0 2px #7a1010 inset; }
 
-    #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; }
-    #crosshair .c-line { position: absolute; background: rgba(0, 255, 140, 0.9); box-shadow: 0 0 4px rgba(0,255,140,.8); transition: all .06s; }
-    #crosshair .c-t { left: 11px; top: 0;    width: 2px; height: 7px; }
-    #crosshair .c-b { left: 11px; bottom: 0; width: 2px; height: 7px; }
-    #crosshair .c-l { top: 11px; left: 0;    width: 7px; height: 2px; }
-    #crosshair .c-r { top: 11px; right: 0;   width: 7px; height: 2px; }
-    #crosshair.hit .c-line { background: #ff3b3b; box-shadow: 0 0 6px #ff3b3b; }
+    /* ============ 全屏界面 ============ */
+    .screen { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .screen.dim { background: radial-gradient(ellipse at 50% 40%, rgba(20,10,6,.75), rgba(0,0,0,.94)); backdrop-filter: blur(3px); }
+    .panel-box { position: relative; background: linear-gradient(180deg, rgba(28,16,10,.94), rgba(12,8,6,.96)); border: 1px solid rgba(232,194,106,.45);
+      box-shadow: 0 0 0 6px rgba(0,0,0,.55), 0 0 0 7px rgba(232,194,106,.2), 0 30px 80px rgba(0,0,0,.7); padding: 36px 44px; }
+    .panel-box h2 { font-family: var(--brush); font-weight: 400; font-size: 44px; color: var(--gold2); letter-spacing: 12px; text-align: center; margin-bottom: 20px; text-shadow: 0 0 20px rgba(255,160,60,.35); }
+    .corner { position: absolute; width: 22px; height: 22px; border: 2px solid var(--gold); }
+    .corner.tl { left: -4px; top: -4px; border-right: 0; border-bottom: 0; } .corner.tr { right: -4px; top: -4px; border-left: 0; border-bottom: 0; }
+    .corner.bl { left: -4px; bottom: -4px; border-right: 0; border-top: 0; } .corner.br { right: -4px; bottom: -4px; border-left: 0; border-top: 0; }
 
-    #hitmarker { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px;
-      transform: translate(-50%, -50%) rotate(45deg); opacity: 0; transition: opacity .12s; }
-    #hitmarker span { position: absolute; background: #fff; box-shadow: 0 0 5px #fff; }
-    #hitmarker .h1 { left: 16px; top: 0; width: 2px; height: 9px; }
-    #hitmarker .h2 { left: 16px; bottom: 0; width: 2px; height: 9px; }
-    #hitmarker .h3 { top: 16px; left: 0; width: 9px; height: 2px; }
-    #hitmarker .h4 { top: 16px; right: 0; width: 9px; height: 2px; }
-    #hitmarker.headshot span { background: #ff3b3b; box-shadow: 0 0 6px #ff3b3b; }
-
-    .panel { position: absolute; color: #e8ffe8; text-shadow: 0 0 6px rgba(0,255,140,.5), 0 2px 3px #000; }
-    #hp-panel { left: 28px; bottom: 24px; display: flex; align-items: center; gap: 12px; }
-    #hp-num { font-size: 44px; font-weight: 800; font-style: italic; min-width: 86px; }
-    #hp-bar-wrap { width: 210px; height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(0,255,140,.4); transform: skewX(-12deg); }
-    #hp-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #00c96b, #7dffb0); transition: width .15s; }
-    #hp-panel.low #hp-num { color: #ff5050; }
-    #hp-panel.low #hp-bar { background: linear-gradient(90deg, #c90000, #ff7050); }
-    #armor-row { font-size: 13px; opacity: .85; margin-top: 4px; letter-spacing: 1px; }
-
-    #ammo-panel { right: 32px; bottom: 24px; text-align: right; }
-    #weapon-name { font-size: 15px; letter-spacing: 3px; opacity: .9; margin-bottom: 2px; }
-    #ammo-num { font-size: 48px; font-weight: 800; font-style: italic; line-height: 1; }
-    #ammo-num small { font-size: 22px; opacity: .75; font-weight: 600; }
-    #ammo-panel.empty #ammo-num { color: #ff5050; animation: blink .5s infinite; }
-    @keyframes blink { 50% { opacity: .35; } }
-    #reload-tip { font-size: 14px; color: #ffd24d; margin-top: 4px; opacity: 0; }
-    #reload-tip.show { opacity: 1; animation: blink .6s infinite; }
-    #weapon-slots { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; font-size: 12px; }
-    .wslot { padding: 3px 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.45); color: #aaa; }
-    .wslot.on { border-color: rgba(0,255,140,.8); color: #baffd6; background: rgba(0,60,30,.5); }
-
-    /* 火符技能 */
-    #skill-panel { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); text-align: center; }
-    #skill-icon { width: 54px; height: 54px; border: 2px solid rgba(255,180,60,.7); background: rgba(30,15,0,.6);
-      display: flex; align-items: center; justify-content: center; font-size: 28px; position: relative; overflow: hidden; margin: 0 auto; }
-    #skill-cd { position: absolute; left: 0; bottom: 0; width: 100%; background: rgba(0,0,0,.75); height: 0%; }
-    #skill-panel .skill-key { font-size: 12px; color: #ffd9a0; margin-top: 4px; letter-spacing: 1px; }
-    #skill-icon.ready { box-shadow: 0 0 14px rgba(255,160,40,.7); }
-
-    #top-panel { top: 20px; left: 50%; transform: translateX(-50%); text-align: center; }
-    #level-label { font-size: 15px; letter-spacing: 4px; color: #9fdcb5; }
-    #wave-num { font-size: 26px; font-weight: 800; color: #ffce54; text-shadow: 0 0 10px rgba(255,190,60,.6), 0 2px 3px #000; }
-    #zombies-left { font-size: 14px; margin-top: 2px; color: #ffb0b0; letter-spacing: 2px; }
-
-    /* BOSS 血条 */
-    #boss-bar-wrap { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: 46%;
-      display: none; text-align: center; }
-    #boss-bar-wrap.show { display: block; }
-    #boss-name { font-size: 16px; letter-spacing: 8px; color: #ff8a7a; text-shadow: 0 0 12px rgba(255,60,40,.7); margin-bottom: 4px; }
-    #boss-bar-bg { height: 14px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,90,70,.6); }
-    #boss-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #a01010, #ff5040); transition: width .12s; }
-
-    #score-panel { top: 20px; right: 28px; text-align: right; font-size: 14px; letter-spacing: 1px; }
-    #score-panel b { font-size: 24px; color: #ffce54; }
-    #yangqi-hud { color: #ffd9a0; }
-
-    #killfeed { top: 100px; right: 28px; text-align: right; font-size: 13px; }
-    .kf-item { margin-top: 4px; color: #ffd7d7; background: rgba(0,0,0,.4); padding: 2px 8px; opacity: .95; }
-    .kf-item b { color: #ff6d6d; }
-
-    #view-hint { position: absolute; left: 28px; top: 20px; font-size: 13px; color: #9ab; letter-spacing: 1px; }
-
-    #wave-banner { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%);
-      font-size: 52px; font-weight: 900; color: #ffce54; letter-spacing: 10px;
-      text-shadow: 0 0 24px rgba(255,150,0,.8), 0 3px 5px #000; opacity: 0; transition: opacity .3s; text-align: center; }
-    #wave-banner small { display: block; font-size: 18px; letter-spacing: 6px; color: #fff; margin-top: 8px; font-weight: 500; }
-
-    #dmg-overlay { position: absolute; inset: 0; pointer-events: none; opacity: 0;
-      background: radial-gradient(ellipse at center, transparent 40%, rgba(160,0,0,.65) 100%); transition: opacity .1s; }
-    #lowhp-overlay { position: absolute; inset: 0; pointer-events: none; opacity: 0;
-      background: radial-gradient(ellipse at center, transparent 45%, rgba(120,0,0,.55) 100%);
-      animation: pulse 1.2s infinite; display: none; }
-    #lowhp-overlay.show { display: block; }
-    @keyframes pulse { 0%,100% { opacity: .25; } 50% { opacity: .7; } }
-    #burn-overlay { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
-      background: radial-gradient(ellipse at center, transparent 50%, rgba(200,80,0,.4) 100%); }
-
-    /* ---------- 全屏界面通用 ---------- */
-    .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-      background: radial-gradient(ellipse at 50% 30%, #16261b 0%, #050a07 70%); color: #dfe; z-index: 10; }
-    .screen.hidden { display: none; }
-    .btn { font-size: 18px; color: #ffd24d; cursor: pointer; pointer-events: auto;
-      border: 1px solid rgba(255,210,77,.5); padding: 12px 42px; letter-spacing: 6px;
-      background: rgba(60,40,0,.25); transition: all .2s; }
-    .btn:hover { background: rgba(255,210,77,.15); box-shadow: 0 0 20px rgba(255,210,77,.3); }
-    .btn.secondary { color: #9fdcb5; border-color: rgba(120,220,160,.4); background: rgba(0,40,20,.25); }
-    .btn.small { font-size: 14px; padding: 8px 24px; letter-spacing: 3px; }
-    .back-btn { position: absolute; top: 26px; left: 30px; }
+    /* 加载 */
+    #loading { background: #050404; z-index: 60; }
+    #loading .ld-title { font-family: var(--brush); font-size: 64px; color: var(--gold2); letter-spacing: 16px; text-shadow: 0 0 30px rgba(255,140,40,.4); }
+    #loading .ld-bar { width: 360px; height: 3px; background: rgba(255,255,255,.08); margin-top: 26px; overflow: hidden; }
+    #loading .ld-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #a01818, var(--gold2)); transition: width .2s; }
+    #loading .ld-text { margin-top: 12px; font-size: 13px; color: #a89878; letter-spacing: 3px; }
 
     /* 主菜单 */
-    #title-cn { font-size: 72px; font-weight: 900; letter-spacing: 14px; color: #e8fff0;
-      text-shadow: 0 0 30px rgba(0,255,140,.45), 0 4px 0 #052, 0 8px 20px #000; }
-    #title-en { font-size: 20px; letter-spacing: 16px; color: #6fdd9b; margin-top: 10px; }
-    .divider { width: 420px; height: 1px; background: linear-gradient(90deg, transparent, #3f8f5f, transparent); margin: 30px 0; }
-    #menu-buttons { display: flex; flex-direction: column; gap: 16px; align-items: center; }
-    #loading-status { margin-top: 26px; font-size: 14px; color: #6fdd9b; letter-spacing: 2px; }
-    #menu-yangqi { margin-top: 18px; font-size: 15px; color: #ffd9a0; letter-spacing: 2px; }
-
-    /* 关卡选择 */
-    #level-screen { background: radial-gradient(ellipse at 50% 25%, #101826 0%, #04060a 70%); }
-    #level-screen h2, #upgrade-screen h2 { font-size: 34px; letter-spacing: 12px; color: #e8fff0; margin-bottom: 34px;
-      text-shadow: 0 0 20px rgba(120,180,255,.4); }
-    #level-grid { display: grid; grid-template-columns: repeat(4, 200px); gap: 18px; }
-    .level-card { pointer-events: auto; cursor: pointer; border: 1px solid #3a4a5a; background: rgba(10,18,28,.75);
-      padding: 18px 16px; transition: all .18s; position: relative; }
-    .level-card:hover { border-color: #ffd24d; background: rgba(40,34,10,.6); transform: translateY(-3px); }
-    .level-card.locked { opacity: .38; cursor: not-allowed; filter: grayscale(.8); }
-    .level-card.locked:hover { border-color: #3a4a5a; transform: none; background: rgba(10,18,28,.75); }
-    .level-card .lv-num { font-size: 13px; color: #7f95a8; letter-spacing: 2px; }
-    .level-card .lv-name { font-size: 19px; color: #ffe9c9; margin: 6px 0; letter-spacing: 2px; }
-    .level-card .lv-stars { color: #ffce54; font-size: 13px; letter-spacing: 3px; }
-    .level-card .lv-lock { position: absolute; right: 12px; top: 12px; font-size: 18px; }
-
-    /* 修行 */
-    #upgrade-screen { background: radial-gradient(ellipse at 50% 25%, #26180e 0%, #0a0504 70%); }
-    #upgrade-list { display: flex; flex-direction: column; gap: 14px; width: 560px; }
-    .up-row { pointer-events: auto; display: flex; align-items: center; gap: 16px; border: 1px solid #5a4028;
-      background: rgba(30,20,10,.7); padding: 14px 20px; }
-    .up-row .up-icon { font-size: 30px; width: 46px; text-align: center; }
-    .up-row .up-info { flex: 1; }
-    .up-row .up-name { font-size: 18px; color: #ffe9c9; letter-spacing: 2px; }
-    .up-row .up-desc { font-size: 13px; color: #b8a58c; margin-top: 3px; }
-    .up-row .up-pips { margin-top: 5px; letter-spacing: 3px; font-size: 12px; color: #ffce54; }
-    .up-buy { pointer-events: auto; cursor: pointer; border: 1px solid rgba(255,210,77,.5); color: #ffd24d;
-      background: rgba(60,40,0,.3); padding: 8px 18px; font-size: 14px; letter-spacing: 1px; min-width: 120px; text-align: center; }
-    .up-buy:hover { background: rgba(255,210,77,.18); }
-    .up-buy.disabled { opacity: .4; cursor: not-allowed; }
-    #upgrade-yangqi { margin-bottom: 24px; font-size: 18px; color: #ffd9a0; letter-spacing: 2px; }
-
-    /* 图鉴 */
-    #codex-ui { position: fixed; inset: 0; pointer-events: none; z-index: 9; display: none; }
-    #codex-ui.active { display: block; }
-    #codex-title { position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
-      font-size: 26px; letter-spacing: 14px; color: #e8d9b0; text-shadow: 0 0 16px rgba(255,200,120,.4); }
-    #codex-panel { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%);
-      width: 640px; background: rgba(8,6,4,.82); border: 1px solid #6a5432; padding: 20px 28px; color: #e8dcc0; }
-    #codex-name { font-size: 26px; letter-spacing: 6px; color: #ffe9c9; }
-    #codex-name small { font-size: 14px; color: #c8a86a; margin-left: 14px; letter-spacing: 3px; }
-    #codex-lore { margin-top: 10px; font-size: 14.5px; line-height: 1.85; color: #d5c8ac; }
-    #codex-stats { margin-top: 10px; font-size: 13px; color: #a8b8a0; letter-spacing: 1px; display: flex; gap: 22px; }
-    #codex-stats b { color: #ffce54; }
-    #codex-nav { position: absolute; left: 50%; bottom: 232px; transform: translateX(-50%); display: flex; gap: 420px; }
-    .codex-arrow { pointer-events: auto; cursor: pointer; font-size: 40px; color: #c8a86a; padding: 6px 16px;
-      text-shadow: 0 0 10px rgba(255,200,120,.4); }
-    .codex-arrow:hover { color: #ffe9c9; }
-    #codex-back { position: absolute; top: 26px; left: 30px; pointer-events: auto; }
-    #codex-tip { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); font-size: 13px; color: #8a7a5a; letter-spacing: 2px; }
+    #menu { align-items: flex-start; justify-content: center; padding-left: 8vw; background: linear-gradient(90deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.35) 45%, rgba(0,0,0,0) 70%); }
+    #menu .title { font-family: var(--brush); font-size: 108px; line-height: 1; color: #f4e6c0; letter-spacing: 10px;
+      text-shadow: 0 0 40px rgba(255,90,40,.35), 0 4px 0 #3a0a06, 0 10px 30px #000; }
+    #menu .subtitle { display: flex; align-items: center; gap: 14px; margin-top: 16px; font-size: 20px; letter-spacing: 10px; color: var(--gold); }
+    #menu .subtitle .ver { font-family: var(--serif); font-size: 13px; letter-spacing: 2px; padding: 3px 10px; border: 1px solid rgba(232,194,106,.5); color: var(--gold2); }
+    #menu .menu-btns { display: flex; flex-direction: column; gap: 14px; margin-top: 48px; }
+    #menu .menu-foot { margin-top: 38px; font-size: 14px; color: #bfae8a; letter-spacing: 2px; line-height: 2; }
+    #menu .menu-foot b { color: var(--gold2); }
+    #menu-tip { position: absolute; right: 30px; bottom: 22px; font-size: 12px; color: rgba(255,255,255,.35); letter-spacing: 2px; }
 
     /* 剧情卡 */
-    #story-screen { background: rgba(0,0,0,.88); }
-    #story-box { width: 620px; border: 1px solid #4a5a48; background: rgba(8,12,8,.9); padding: 40px 46px; }
-    #story-level { font-size: 15px; color: #9fdcb5; letter-spacing: 5px; }
-    #story-name { font-size: 32px; color: #ffe9c9; letter-spacing: 6px; margin: 12px 0 22px; }
-    #story-text { font-size: 16px; line-height: 2.1; color: #cfd8c0; white-space: pre-line; }
-    #story-go { margin-top: 34px; text-align: center; }
+    #story .panel-box { width: 640px; }
+    #story .st-ch { text-align: center; font-size: 13px; letter-spacing: 8px; color: #a8987a; }
+    #story .st-text { font-size: 17px; line-height: 2.2; color: #e2d6bc; white-space: pre-line; text-align: center; margin: 10px 0 30px; }
+    #story .st-go { display: flex; justify-content: center; }
+    #story .stars { text-align: center; color: #ff8a50; letter-spacing: 4px; margin-bottom: 12px; }
+
+    /* 修行 */
+    #upgrade .panel-box { width: 720px; }
+    #up-yangqi { text-align: center; font-size: 18px; color: var(--gold2); letter-spacing: 3px; margin-bottom: 18px; }
+    #up-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .up-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: rgba(0,0,0,.35); border: 1px solid rgba(232,194,106,.18); }
+    .up-row .ic { font-size: 30px; width: 42px; text-align: center; filter: drop-shadow(0 0 8px rgba(255,180,80,.4)); }
+    .up-row .nm { font-size: 17px; color: #f4e2b8; letter-spacing: 2px; }
+    .up-row .ds { font-size: 12px; color: #a8987a; margin-top: 3px; }
+    .up-row .pips { margin-top: 5px; letter-spacing: 3px; font-size: 11px; color: var(--gold); }
+    .up-row .buy { margin-left: auto; cursor: pointer; pointer-events: auto; padding: 8px 12px; min-width: 96px; text-align: center; font-size: 13px; color: var(--gold2); border: 1px solid rgba(232,194,106,.45); background: rgba(80,30,10,.35); }
+    .up-row .buy:hover { background: rgba(160,60,20,.45); }
+    .up-row .buy.dis { opacity: .35; pointer-events: none; }
+    .panel-foot { display: flex; justify-content: center; gap: 16px; margin-top: 26px; }
+
+    /* 设置 / 帮助 */
+    #settings .panel-box, #help .panel-box { width: 560px; }
+    .set-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px dashed rgba(232,194,106,.15); font-size: 15px; letter-spacing: 2px; }
+    .set-row input[type=range] { width: 220px; accent-color: #c8702a; pointer-events: auto; }
+    .seg { display: flex; gap: 6px; }
+    .seg span { cursor: pointer; pointer-events: auto; padding: 5px 12px; font-size: 13px; border: 1px solid rgba(232,194,106,.3); color: #bfae8a; }
+    .seg span.on { background: rgba(160,60,20,.55); color: #fff2d0; border-color: var(--gold); }
+    .help-grid { display: grid; grid-template-columns: 130px 1fr; gap: 10px 18px; font-size: 14.5px; line-height: 1.6; }
+    .help-grid .k { color: var(--gold2); text-align: right; font-weight: 700; }
+    .help-note { margin-top: 18px; font-size: 13px; color: #a8987a; line-height: 1.9; }
+
+    /* 图鉴 */
+    #codex-ui { position: fixed; inset: 0; z-index: 15; pointer-events: none; }
+    #cx-title { position: absolute; top: 28px; left: 50%; transform: translateX(-50%); font-family: var(--brush); font-size: 46px; letter-spacing: 16px; color: var(--gold2); text-shadow: 0 0 24px rgba(255,120,40,.4); }
+    #cx-back { position: absolute; top: 30px; left: 32px; }
+    #cx-info { position: absolute; right: 5vw; top: 50%; transform: translateY(-50%); width: 400px; pointer-events: auto; }
+    #cx-info .cat { display: inline-block; font-size: 12px; letter-spacing: 3px; padding: 2px 10px; border: 1px solid; margin-bottom: 10px; }
+    #cx-name { font-family: var(--brush); font-size: 56px; color: #fff0d0; letter-spacing: 8px; line-height: 1.1; }
+    #cx-sub { font-size: 16px; color: var(--gold); letter-spacing: 6px; margin: 8px 0 16px; }
+    #cx-lore { font-size: 15px; line-height: 2; color: #ddd0b4; }
+    #cx-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-top: 20px; font-size: 13px; color: #b8a888; }
+    #cx-stats b { color: var(--gold2); font-size: 15px; }
+    #cx-traits { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+    #cx-traits span { font-size: 12px; padding: 3px 10px; background: rgba(160,30,20,.35); border: 1px solid rgba(255,120,80,.35); color: #ffd8c0; }
+    #cx-list { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; pointer-events: auto; }
+    #cx-list span { flex-shrink: 0; white-space: nowrap; cursor: pointer; padding: 7px 10px; font-size: 13px; letter-spacing: 1px; background: rgba(0,0,0,.55); border: 1px solid rgba(232,194,106,.2); color: #bfae8a; }
+    #cx-list span.on { color: #fff; border-color: var(--gold); background: rgba(120,30,12,.6); }
+    #cx-list span.unseen { color: #6a5e4a; }
+    .cx-arrow { position: absolute; top: 50%; transform: translateY(-50%); font-size: 64px; color: var(--gold); cursor: pointer; pointer-events: auto; padding: 10px 20px; opacity: .7; }
+    .cx-arrow:hover { opacity: 1; }
+    #cx-prev { left: 3vw; } #cx-next { left: calc(3vw + 70px); }
+    #cx-hint { position: absolute; left: 3vw; top: calc(50% + 60px); font-size: 12px; color: #8a7a60; letter-spacing: 2px; }
+
+    /* ============ HUD ============ */
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; display: none; }
+    #hud.on { display: block; }
+    #xp { position: absolute; left: 0; right: 0; top: 0; height: 8px; background: rgba(0,0,0,.55); border-bottom: 1px solid rgba(232,194,106,.25); }
+    #xp-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #8a5a10, #ffd060, #fff2b0); box-shadow: 0 0 12px rgba(255,200,80,.7); transition: width .15s; }
+    #lv { position: absolute; left: 18px; top: 14px; font-size: 14px; letter-spacing: 3px; color: var(--gold2); text-shadow: 0 1px 3px #000; }
+    #lv b { font-size: 26px; font-family: var(--brush); font-weight: 400; margin-left: 4px; }
+    #top-c { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; text-shadow: 0 2px 4px #000; }
+    #ch-name { font-family: var(--brush); font-size: 26px; letter-spacing: 6px; color: #f4e2b8; }
+    #wave-line { font-size: 13px; letter-spacing: 4px; color: #d0b890; margin-top: 2px; }
+    #wave-bar { width: 220px; height: 3px; background: rgba(255,255,255,.12); margin: 6px auto 0; }
+    #wave-fill { height: 100%; width: 0; background: #c0402a; }
+    #top-r { position: absolute; top: 16px; right: 18px; display: flex; gap: 16px; align-items: flex-start; }
+    #stats-r { text-align: right; font-size: 13px; letter-spacing: 2px; color: #d8c8a8; text-shadow: 0 1px 3px #000; line-height: 1.7; }
+    #stats-r b { font-size: 20px; color: #fff0d0; }
+    #radar { width: 132px; height: 132px; border-radius: 50%; background: radial-gradient(circle, rgba(20,14,10,.75), rgba(0,0,0,.7)); border: 1px solid rgba(232,194,106,.4); box-shadow: 0 0 0 3px rgba(0,0,0,.4); }
+
+    #bosses { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); width: 50%; display: flex; flex-direction: column; gap: 8px; }
+    .boss { text-align: center; }
+    .boss .bn { font-family: var(--brush); font-size: 24px; letter-spacing: 10px; color: #ffb090; text-shadow: 0 0 16px rgba(255,40,20,.7); }
+    .boss .bb { height: 12px; background: rgba(0,0,0,.65); border: 1px solid rgba(255,90,60,.6); position: relative; overflow: hidden; }
+    .boss .bf { height: 100%; background: linear-gradient(90deg, #6a0808, #e03020, #ff8050); transition: width .12s; }
+    .boss .bl { position: absolute; inset: 0; background: rgba(255,255,255,.5); transition: width .6s; width: 0; }
+
+    #bl { position: absolute; left: 22px; bottom: 22px; }
+    #hp-wrap { display: flex; align-items: center; gap: 12px; }
+    #hp-num { font-size: 38px; font-weight: 900; color: #f6e8c8; min-width: 70px; text-shadow: 0 2px 6px #000; font-style: italic; }
+    #hp-bar { width: 260px; height: 14px; background: rgba(0,0,0,.65); border: 1px solid rgba(232,194,106,.4); transform: skewX(-18deg); position: relative; overflow: hidden; }
+    #hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #7a1010, #d03a2a, #ff7a50); transition: width .12s; }
+    #hp-lag { position: absolute; left: 0; top: 0; height: 100%; background: rgba(255,230,200,.5); transition: width .8s .2s; z-index: -1; }
+    #shield { display: flex; gap: 5px; margin: 6px 0 0 84px; }
+    #shield span { width: 22px; height: 6px; background: #ffe080; box-shadow: 0 0 8px #ffd060; transform: skewX(-18deg); }
+    #skills { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; max-width: 520px; }
+    .sk { position: relative; width: 44px; height: 44px; background: rgba(10,6,4,.75); border: 1px solid rgba(232,194,106,.45); display: flex; align-items: center; justify-content: center; font-size: 22px; overflow: hidden; }
+    .sk.p { width: 30px; height: 30px; font-size: 15px; border-color: rgba(160,200,255,.35); }
+    .sk.r { border-color: #ff8a50; box-shadow: 0 0 10px rgba(255,120,60,.5); }
+    .sk.evo { border-color: #ffd060; box-shadow: 0 0 14px rgba(255,200,60,.8); }
+    .sk .cdm { position: absolute; left: 0; bottom: 0; width: 100%; background: rgba(0,0,0,.65); }
+    .sk .lvl { position: absolute; right: 2px; bottom: 0; font-size: 10px; color: var(--gold2); text-shadow: 0 0 3px #000; }
+
+    #bc { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; gap: 14px; align-items: flex-end; }
+    .ab { position: relative; width: 58px; height: 58px; background: rgba(10,6,4,.78); border: 1px solid rgba(232,194,106,.55); display: flex; align-items: center; justify-content: center; font-size: 28px; overflow: hidden; }
+    .ab.ult { width: 74px; height: 74px; font-size: 34px; border-color: #ffd060; border-radius: 50%; }
+    .ab .cdm { position: absolute; left: 0; bottom: 0; width: 100%; background: rgba(0,0,0,.7); }
+    .ab .key { position: absolute; left: 3px; top: 1px; font-size: 11px; color: var(--gold2); }
+    .ab .cnt { position: absolute; right: 4px; bottom: 2px; font-size: 11px; color: #fff; }
+    .ab.ready { box-shadow: 0 0 16px rgba(255,170,60,.7); }
+    .ab.ult.ready { box-shadow: 0 0 26px rgba(255,210,90,.95); animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { box-shadow: 0 0 40px rgba(255,220,120,1); } }
+
+    #br { position: absolute; right: 26px; bottom: 22px; text-align: right; text-shadow: 0 2px 4px #000; }
+    #wp-name { font-family: var(--brush); font-size: 28px; letter-spacing: 6px; color: #f4e2b8; }
+    #ammo { font-size: 44px; font-weight: 900; font-style: italic; line-height: 1; color: #fff0d0; }
+    #ammo small { font-size: 18px; color: #b8a888; font-weight: 600; }
+    #ammo.empty { color: #ff5a40; }
+    #reload { font-size: 13px; color: #ffcc60; letter-spacing: 3px; height: 18px; }
+    #slots { display: flex; gap: 5px; justify-content: flex-end; margin-top: 8px; }
+    #slots span { padding: 3px 9px; font-size: 12px; background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.18); color: #9a8c74; }
+    #slots span.on { border-color: var(--gold); color: #fff0d0; background: rgba(120,40,14,.55); }
+
+    #crosshair { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%,-50%); }
+    #crosshair i { position: absolute; background: rgba(255,240,200,.9); box-shadow: 0 0 3px #000; transition: all .06s; }
+    #crosshair .t { left: 14px; top: 0; width: 2px; height: 8px; } #crosshair .b { left: 14px; bottom: 0; width: 2px; height: 8px; }
+    #crosshair .l { top: 14px; left: 0; width: 8px; height: 2px; } #crosshair .r { top: 14px; right: 0; width: 8px; height: 2px; }
+    #crosshair .d { left: 14px; top: 14px; width: 2px; height: 2px; }
+    #hitm { position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; transform: translate(-50%,-50%) rotate(45deg); opacity: 0; transition: opacity .1s; }
+    #hitm i { position: absolute; background: #fff; }
+    #hitm .a { left: 17px; top: 0; width: 2px; height: 10px; } #hitm .b { left: 17px; bottom: 0; width: 2px; height: 10px; }
+    #hitm .c { top: 17px; left: 0; width: 10px; height: 2px; } #hitm .d { top: 17px; right: 0; width: 10px; height: 2px; }
+    #hitm.head i { background: #ff4a3a; box-shadow: 0 0 6px #ff4a3a; }
+    #hitm.kill i { background: #ffd060; }
+
+    #dmgs { position: absolute; inset: 0; overflow: hidden; }
+    .dn { position: absolute; font-weight: 900; font-size: 18px; color: #fff; text-shadow: 0 0 3px #000, 0 2px 2px #000; white-space: nowrap; will-change: transform, opacity; }
+    .dn.crit { color: #ffd060; font-size: 26px; }
+    .dn.fire { color: #ff9a50; }
+    .dn.art { color: #a8d8ff; }
+    .dn.player { color: #ff4a3a; font-size: 22px; }
+    .dn.heal { color: #7aff9a; }
+
+    #banner { position: absolute; left: 50%; top: 30%; transform: translate(-50%,-50%); text-align: center; opacity: 0; transition: opacity .35s; pointer-events: none; }
+    #banner .bt { font-family: var(--brush); font-size: 72px; color: #ffe8b0; letter-spacing: 14px; text-shadow: 0 0 30px rgba(255,90,30,.7), 0 4px 6px #000; }
+    #banner .bs { font-size: 18px; letter-spacing: 8px; color: #e8d8b8; margin-top: 8px; text-shadow: 0 2px 4px #000; }
+    #toast { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); font-size: 16px; letter-spacing: 3px; color: #ffe0a0; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .3s; }
+    #feed { position: absolute; right: 20px; top: 170px; text-align: right; font-size: 13px; }
+    #feed div { margin-top: 4px; padding: 2px 10px; background: linear-gradient(90deg, transparent, rgba(0,0,0,.55)); color: #f0dcc0; }
+    #lowhp { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(140,0,0,.55) 100%); opacity: 0; animation: lowp 1.1s infinite; display: none; }
+    #lowhp.on { display: block; }
+    @keyframes lowp { 0%,100% { opacity: .25; } 50% { opacity: .75; } }
+    #burn { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 50%, rgba(220,90,0,.4) 100%); opacity: 0; transition: opacity .3s; }
+
+    /* ============ 选卡 ============ */
+    #cards { z-index: 30; }
+    #cards .cd-title { font-family: var(--brush); font-size: 58px; color: var(--gold2); letter-spacing: 16px; text-shadow: 0 0 30px rgba(255,160,60,.6); }
+    #cards .cd-sub { font-size: 15px; color: #c8b890; letter-spacing: 5px; margin: 6px 0 30px; }
+    #card-row { display: flex; gap: 22px; }
+    .card { position: relative; width: 236px; min-height: 330px; cursor: pointer; pointer-events: auto; padding: 22px 20px 18px; text-align: center;
+      background: linear-gradient(180deg, #2a1810 0%, #120a06 100%); border: 1px solid var(--rc, #8a7a5a);
+      box-shadow: 0 0 0 5px rgba(0,0,0,.6), 0 0 0 6px var(--rc, #8a7a5a), 0 16px 40px rgba(0,0,0,.6); transition: transform .15s, box-shadow .2s;
+      animation: cardIn .4s backwards; }
+    .card:nth-child(2) { animation-delay: .06s; } .card:nth-child(3) { animation-delay: .12s; } .card:nth-child(4) { animation-delay: .18s; }
+    @keyframes cardIn { from { transform: translateY(40px) scale(.9); opacity: 0; } }
+    .card:hover { transform: translateY(-10px); box-shadow: 0 0 0 5px rgba(0,0,0,.6), 0 0 0 6px var(--rc), 0 0 40px var(--rc); }
+    .card .rar { font-size: 12px; letter-spacing: 4px; color: var(--rc); }
+    .card .kind { position: absolute; left: 12px; top: 10px; font-size: 11px; color: #8a7a5a; letter-spacing: 2px; }
+    .card .num { position: absolute; right: 12px; top: 8px; font-size: 13px; color: #6a5a40; }
+    .card .ic { font-size: 62px; margin: 16px 0 10px; filter: drop-shadow(0 0 16px var(--rc)); }
+    .card .nm { font-family: var(--brush); font-size: 30px; letter-spacing: 4px; color: #fff0d0; }
+    .card .lvs { margin: 6px 0 12px; font-size: 14px; letter-spacing: 3px; color: var(--gold); }
+    .card .ds { font-size: 14px; line-height: 1.8; color: #d8ccb0; }
+    .card .new { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--red); color: #fff; font-size: 12px; padding: 2px 12px; letter-spacing: 3px; }
+    .r-common { --rc: #b8b0a0; } .r-rare { --rc: #6ab0ff; } .r-epic { --rc: #c080ff; } .r-legend { --rc: #ffc040; }
+    #card-foot { display: flex; gap: 16px; margin-top: 34px; }
 
     /* 结算 */
-    #gameover-screen { background: radial-gradient(ellipse at 50% 30%, #2a0f0f 0%, #070303 70%); }
-    #go-title { font-size: 64px; font-weight: 900; color: #ff4444; letter-spacing: 12px; text-shadow: 0 0 40px rgba(255,0,0,.5), 0 4px 0 #400; }
-    #victory-screen { background: radial-gradient(ellipse at 50% 30%, #2a230b 0%, #070503 70%); }
-    #vc-title { font-size: 58px; font-weight: 900; color: #ffd24d; letter-spacing: 12px; text-shadow: 0 0 40px rgba(255,190,40,.5); }
-    .result-stats { margin-top: 28px; font-size: 17px; line-height: 2.2; color: #ecc; text-align: center; letter-spacing: 2px; }
-    .result-stats b { color: #ffce54; font-size: 24px; }
-    .result-btns { margin-top: 36px; display: flex; gap: 18px; }
+    #result .panel-box { width: 620px; text-align: center; }
+    #rs-title { font-family: var(--brush); font-size: 72px; letter-spacing: 16px; }
+    #rs-title.win { color: var(--gold2); text-shadow: 0 0 40px rgba(255,190,60,.6); }
+    #rs-title.lose { color: #ff5a4a; text-shadow: 0 0 40px rgba(255,40,20,.5); }
+    #rs-sub { font-size: 15px; color: #b8a888; letter-spacing: 4px; margin: 4px 0 22px; }
+    #rs-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    #rs-grid div { background: rgba(0,0,0,.35); border: 1px solid rgba(232,194,106,.18); padding: 12px; font-size: 12px; color: #a8987a; letter-spacing: 2px; }
+    #rs-grid b { display: block; font-size: 26px; color: #fff0d0; margin-top: 4px; letter-spacing: 1px; }
+    #rs-build { margin-top: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+    #rs-build span { font-size: 13px; padding: 3px 10px; background: rgba(60,20,10,.5); border: 1px solid rgba(232,194,106,.25); }
+    #rs-btns { display: flex; justify-content: center; gap: 16px; margin-top: 28px; flex-wrap: wrap; }
 
-    #pause-hint { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 9;
-      color: #fff; font-size: 22px; letter-spacing: 4px; text-shadow: 0 2px 8px #000;
-      background: rgba(0,0,0,.6); padding: 20px 50px; border: 1px solid #444; display: none; }
+    /* 暂停 */
+    #pause .panel-box { width: 420px; text-align: center; }
+    #pause .pbtns { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+    #pause-build { margin: 0 0 20px; display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+    #pause-build span { font-size: 12px; padding: 2px 8px; border: 1px solid rgba(232,194,106,.25); background: rgba(0,0,0,.3); }
+    #click-hint { position: fixed; left: 50%; bottom: 14%; transform: translateX(-50%); z-index: 40; font-size: 16px; letter-spacing: 4px; color: #ffe0a0; background: rgba(0,0,0,.6); padding: 10px 24px; border: 1px solid rgba(232,194,106,.4); pointer-events: none; }
   </style>
 </head>
 <body>
   <div id="app"></div>
 
-  <!-- HUD -->
-  <div id="hud">
-    <div id="crosshair">
-      <div class="c-line c-t"></div><div class="c-line c-b"></div>
-      <div class="c-line c-l"></div><div class="c-line c-r"></div>
-    </div>
-    <div id="hitmarker"><span class="h1"></span><span class="h2"></span><span class="h3"></span><span class="h4"></span></div>
-
-    <div class="panel" id="top-panel">
-      <div id="level-label">第 1 关</div>
-      <div id="wave-num">1 / 3 波</div>
-      <div id="zombies-left">僵尸剩余 0</div>
-    </div>
-
-    <div id="boss-bar-wrap">
-      <div id="boss-name">犼 · 僵尸之王</div>
-      <div id="boss-bar-bg"><div id="boss-bar"></div></div>
-    </div>
-
-    <div class="panel" id="score-panel">
-      分数 <b id="score-num">0</b><br/>
-      击杀 <span id="kill-num">0</span><br/>
-      <span id="yangqi-hud">阳气 0</span>
-    </div>
-    <div class="panel" id="killfeed"></div>
-    <div class="panel" id="view-hint">V 切换视角 · 右键掷火符</div>
-
-    <div class="panel" id="hp-panel">
-      <div id="hp-num">100</div>
-      <div>
-        <div id="hp-bar-wrap"><div id="hp-bar"></div></div>
-        <div id="armor-row">生命值 HP</div>
-      </div>
-    </div>
-
-    <div class="panel" id="skill-panel">
-      <div id="skill-icon">🔥<div id="skill-cd"></div></div>
-      <div class="skill-key">火符 · 右键</div>
-    </div>
-
-    <div class="panel" id="ammo-panel">
-      <div id="weapon-name">AK-47</div>
-      <div id="ammo-num">30 <small>/ 240</small></div>
-      <div id="reload-tip">按 R 换弹</div>
-      <div id="weapon-slots">
-        <div class="wslot on" data-slot="0">1 AK-47</div>
-        <div class="wslot" data-slot="1">2 加特林</div>
-        <div class="wslot" data-slot="2">3 霰弹</div>
-        <div class="wslot" data-slot="3">4 冲锋枪</div>
-        <div class="wslot" data-slot="4">5 手枪</div>
-        <div class="wslot" data-slot="5">6 军刀</div>
-      </div>
-    </div>
-
-    <div id="wave-banner"></div>
-    <div id="dmg-overlay"></div>
-    <div id="burn-overlay"></div>
-    <div id="lowhp-overlay"></div>
+  <!-- 加载 -->
+  <div class="screen" id="loading">
+    <div class="ld-title">真理斗僵尸</div>
+    <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div></div>
+    <div class="ld-text" id="ld-text">起坛作法中……</div>
   </div>
 
   <!-- 主菜单 -->
-  <div class="screen" id="menu-screen">
-    <div id="title-cn">真理斗僵尸</div>
-    <div id="title-en">ZOMBIE · STRIKE</div>
-    <div class="divider"></div>
-    <div id="menu-buttons">
-      <div class="btn" id="btn-battle">出 战</div>
-      <div class="btn secondary" id="btn-codex">僵 尸 图 鉴</div>
-      <div class="btn secondary" id="btn-upgrade">道 长 修 行</div>
+  <div class="screen hidden" id="menu">
+    <div class="title">真理斗僵尸</div>
+    <div class="subtitle"><span>茅山伏魔录</span><span class="ver">v1.1</span></div>
+    <div class="menu-btns">
+      <div class="btn" id="m-start">开始除祟</div>
+      <div class="btn ghost" id="m-upgrade">道长修行</div>
+      <div class="btn ghost" id="m-codex">百鬼图鉴</div>
+      <div class="btn ghost" id="m-settings">设　　置</div>
+      <div class="btn ghost" id="m-help">操作说明</div>
     </div>
-    <div id="menu-yangqi">阳气 0</div>
-    <div id="loading-status">正在加载资源…</div>
+    <div class="menu-foot" id="menu-foot"></div>
+    <div id="menu-tip">所有角色、枪械、场景均由代码实时建模 · Three.js</div>
   </div>
 
-  <!-- 关卡选择 -->
-  <div class="screen hidden" id="level-screen">
-    <div class="btn small secondary back-btn" data-back>← 返回</div>
-    <h2>选 择 关 卡</h2>
-    <div id="level-grid"></div>
+  <!-- 章节剧情 -->
+  <div class="screen dim hidden" id="story">
+    <div class="panel-box">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div class="st-ch" id="st-ch">CHAPTER I</div>
+      <h2 id="st-name">义庄 · 尸变</h2>
+      <div class="stars" id="st-stars"></div>
+      <div class="st-text" id="st-text"></div>
+      <div class="st-go"><div class="btn" id="st-go">开坛除祟</div></div>
+    </div>
   </div>
 
   <!-- 修行 -->
-  <div class="screen hidden" id="upgrade-screen">
-    <div class="btn small secondary back-btn" data-back>← 返回</div>
-    <h2>道 长 修 行</h2>
-    <div id="upgrade-yangqi">阳气 0</div>
-    <div id="upgrade-list"></div>
-  </div>
-
-  <!-- 图鉴 UI 覆盖层 -->
-  <div id="codex-ui">
-    <div id="codex-title">僵 尸 图 鉴</div>
-    <div id="codex-tip">点击棺中之物查看 · ←/→ 切换</div>
-    <div class="btn small secondary" id="codex-back">← 返回</div>
-    <div id="codex-nav">
-      <div class="codex-arrow" id="codex-prev">‹</div>
-      <div class="codex-arrow" id="codex-next">›</div>
-    </div>
-    <div id="codex-panel">
-      <div id="codex-name">紫僵 <small>淤血初变</small></div>
-      <div id="codex-lore"></div>
-      <div id="codex-stats"></div>
+  <div class="screen dim hidden" id="upgrade">
+    <div class="panel-box">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <h2>道长修行</h2>
+      <div id="up-yangqi"></div>
+      <div id="up-list"></div>
+      <div class="panel-foot"><div class="btn small ghost" data-back>返　回</div></div>
     </div>
   </div>
 
-  <!-- 关前剧情 -->
-  <div class="screen hidden" id="story-screen">
-    <div id="story-box">
-      <div id="story-level">第 1 关</div>
-      <div id="story-name">乱葬岗 · 尸动</div>
-      <div id="story-text"></div>
-      <div id="story-go"><div class="btn" id="story-start">开 始 除 祟</div></div>
+  <!-- 设置 -->
+  <div class="screen dim hidden" id="settings">
+    <div class="panel-box">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <h2>设　置</h2>
+      <div class="set-row">音效音量 <input type="range" id="s-sfx" min="0" max="1" step="0.05" /></div>
+      <div class="set-row">音乐音量 <input type="range" id="s-music" min="0" max="1" step="0.05" /></div>
+      <div class="set-row">鼠标灵敏度 <input type="range" id="s-sens" min="0.3" max="2.5" step="0.05" /></div>
+      <div class="set-row">视野 FOV <input type="range" id="s-fov" min="60" max="100" step="1" /></div>
+      <div class="set-row">画质 <div class="seg" id="s-quality"><span data-v="low">流畅</span><span data-v="medium">均衡</span><span data-v="high">精美</span></div></div>
+      <div class="set-row">默认视角 <div class="seg" id="s-view"><span data-v="tps">第三人称</span><span data-v="fps">第一人称</span></div></div>
+      <div class="panel-foot"><div class="btn small ghost" id="s-back">返　回</div></div>
     </div>
   </div>
 
-  <!-- 战败 -->
-  <div class="screen hidden" id="gameover-screen">
-    <div id="go-title">道 长 阵 亡</div>
-    <div class="result-stats" id="go-stats"></div>
-    <div class="result-btns">
-      <div class="btn" id="go-retry">再 战</div>
-      <div class="btn secondary" id="go-back">回 义 庄</div>
+  <!-- 操作说明 -->
+  <div class="screen dim hidden" id="help">
+    <div class="panel-box">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <h2>操作说明</h2>
+      <div class="help-grid">
+        <div class="k">W A S D</div><div>移动　·　Shift 疾跑　·　空格 跳跃</div>
+        <div class="k">鼠标左键</div><div>射击 / 挥剑</div>
+        <div class="k">右键 / Q</div><div>掷出火符（抛物线，落地爆出真火）</div>
+        <div class="k">E</div><div>罡步：短距冲刺，冲刺中无敌</div>
+        <div class="k">F</div><div>天师降魔：击杀蓄满后，天雷劈遍全场</div>
+        <div class="k">1 ~ 6 / 滚轮</div><div>切换已获得的武器　·　R 换弹</div>
+        <div class="k">V</div><div>切换 第一 / 第三人称</div>
+        <div class="k">Esc</div><div>暂停</div>
+      </div>
+      <div class="help-note">
+        · 诛杀邪祟掉落<b style="color:#ffd060">阳气珠</b>，靠近自动吸取。道行升级时从三件道法中择一：五雷正法、桃木剑阵、铜钱剑、八卦镜、糯米阵、墨斗线……<br/>
+        · 道术满级并满足条件后可<b style="color:#ffc040">进阶</b>；击败首领过关可择一件<b style="color:#c080ff">法宝</b>。<br/>
+        · 精英怪掉落<b style="color:#ffd060">宝箱</b>。局后阳气可在「道长修行」中永久强化。
+      </div>
+      <div class="panel-foot"><div class="btn small ghost" data-back>返　回</div></div>
     </div>
   </div>
 
-  <!-- 通关 -->
-  <div class="screen hidden" id="victory-screen">
-    <div id="vc-title">除 祟 功 成</div>
-    <div class="result-stats" id="vc-stats"></div>
-    <div class="result-btns">
-      <div class="btn" id="vc-next">下 一 关</div>
-      <div class="btn secondary" id="vc-back">回 义 庄</div>
+  <!-- 图鉴 -->
+  <div id="codex-ui" class="hidden">
+    <div id="cx-title">百鬼图鉴</div>
+    <div class="btn small ghost" id="cx-back">← 返回</div>
+    <div class="cx-arrow" id="cx-prev">‹</div><div class="cx-arrow" id="cx-next">›</div>
+    <div id="cx-hint">拖拽旋转 · ←/→ 切换</div>
+    <div id="cx-info">
+      <div class="cat" id="cx-cat">僵尸</div>
+      <div id="cx-name">伏尸</div>
+      <div id="cx-sub">尸变之始</div>
+      <div id="cx-lore"></div>
+      <div id="cx-stats"></div>
+      <div id="cx-traits"></div>
+    </div>
+    <div id="cx-list"></div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="xp"><div id="xp-fill"></div></div>
+    <div id="lv">道行 <b id="lv-num">1</b></div>
+    <div id="top-c">
+      <div id="ch-name">义庄 · 尸变</div>
+      <div id="wave-line">第 1 / 4 波 · 00:00</div>
+      <div id="wave-bar"><div id="wave-fill"></div></div>
+    </div>
+    <div id="top-r">
+      <div id="stats-r">诛邪 <b id="kills">0</b><br/>阳气 <span id="gold">0</span><br/><span id="timer">00:00</span></div>
+      <canvas id="radar" width="132" height="132"></canvas>
+    </div>
+    <div id="bosses"></div>
+    <div id="feed"></div>
+
+    <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="d"></i></div>
+    <div id="hitm"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>
+    <div id="dmgs"></div>
+
+    <div id="bl">
+      <div id="hp-wrap"><div id="hp-num">100</div><div id="hp-bar"><div id="hp-lag"></div><div id="hp-fill"></div></div></div>
+      <div id="shield"></div>
+      <div id="skills"></div>
+    </div>
+    <div id="bc">
+      <div class="ab" id="ab-fu"><span class="key">Q</span>📜<div class="cdm"></div><span class="cnt" id="ab-fu-n"></span></div>
+      <div class="ab ult" id="ab-ult"><span class="key">F</span>☯<div class="cdm"></div></div>
+      <div class="ab" id="ab-dash"><span class="key">E</span>💨<div class="cdm"></div></div>
+    </div>
+    <div id="br">
+      <div id="wp-name">驳壳枪</div>
+      <div id="ammo">20 <small>/ ∞</small></div>
+      <div id="reload"></div>
+      <div id="slots"></div>
+    </div>
+    <div id="banner"><div class="bt"></div><div class="bs"></div></div>
+    <div id="toast"></div>
+    <div id="lowhp"></div>
+    <div id="burn"></div>
+  </div>
+
+  <!-- 选卡 -->
+  <div class="screen dim hidden" id="cards">
+    <div class="cd-title" id="cd-title">道行精进</div>
+    <div class="cd-sub" id="cd-sub">择一道法修习</div>
+    <div id="card-row"></div>
+    <div id="card-foot">
+      <div class="btn small ghost" id="cd-reroll">重掷 (1)</div>
+      <div class="btn small ghost" id="cd-skip">跳过（阳气 +30）</div>
     </div>
   </div>
 
-  <div id="pause-hint">已暂停 · 点击继续</div>
+  <!-- 暂停 -->
+  <div class="screen dim hidden" id="pause">
+    <div class="panel-box">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <h2>暂　停</h2>
+      <div id="pause-build"></div>
+      <div class="pbtns">
+        <div class="btn" id="p-resume">继续除祟</div>
+        <div class="btn ghost" id="p-settings">设　　置</div>
+        <div class="btn ghost" id="p-quit">放弃本局</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 结算 -->
+  <div class="screen dim hidden" id="result">
+    <div class="panel-box">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div id="rs-title" class="lose">道长阵亡</div>
+      <div id="rs-sub"></div>
+      <div id="rs-grid"></div>
+      <div id="rs-build"></div>
+      <div id="rs-btns">
+        <div class="btn" id="rs-endless">无尽轮回</div>
+        <div class="btn" id="rs-again">再战一局</div>
+        <div class="btn ghost" id="rs-menu">返回义庄</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="click-hint" class="hidden">点击画面继续</div>
 
   <script type="module" src="/src/main.js"></script>
 </body>
