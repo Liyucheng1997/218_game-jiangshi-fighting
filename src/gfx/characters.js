@@ -55,6 +55,13 @@ function profileR(profile, y) {
 
 function shade(hex, k) { return new THREE.Color(hex).multiplyScalar(k); }
 
+// 柔性权重：从挂点 topY 向下 len 米逐渐变软（布条、符纸、发丝）
+const hang = (topY, len, k = 1) => (v) => Math.min(1, Math.max(0, (topY - v.y) / len)) * k;
+// 以某点为根，按距离变软
+const hangFrom = (root, len, k = 1) => (v) => Math.min(1, v.distanceTo(root) / len) * k;
+// 袍摆：靠近下摆处微微飘动
+const hemFlex = (hemY, s, k = 0.35) => (v) => sm((hemY + 0.38) * s, hemY * s, v.y) * k;
+
 // ---------------------------------------------------------------- 头部
 function buildHead(rb, P, look) {
   const c = P.headC, r = P.headR, s = P.s;
@@ -136,7 +143,7 @@ function buildTalisman(rb, P, { len = 0.125, width = 0.052 } = {}) {
   const top = c.y + P.headR.y * 0.5;
   const g = curvedPlane(width * s, len * s, 0.05 * s, 4, 10);
   place(g, [c.x, top - len * s / 2, c.z + P.headR.z * 1.08]);
-  rb.add(g, { bone: 'head', decal: REGION.talisman, color: 0xffffff, rough: 0.9 });
+  rb.add(g, { bone: 'head', decal: REGION.talisman, color: 0xffffff, rough: 0.9, flex: hang(top, len * s, 0.9) });
 }
 
 function buildQueue(rb, P, color = 0x121212) {
@@ -147,10 +154,10 @@ function buildQueue(rb, P, color = 0x121212) {
   ];
   rb.add(braid(pts, 0.024 * s, 8, 22), {
     weights: (v) => { const t = sm(1.46 * s, 1.56 * s, v.y); return [['head', t], ['chest', 1 - t]]; },
-    color, rough: 0.45,
+    color, rough: 0.45, flex: (v) => sm(1.32 * s, 0.98 * s, v.y) * 0.55,
   });
   // 辫梢红绳
-  rb.add(place(cyl(0.016 * s, 0.012 * s, 0.03 * s, 8), [-0.1 * s, 0.985 * s, 0.15 * s]), { bone: 'chest', color: 0x9a1818, rough: 0.8 });
+  rb.add(place(cyl(0.016 * s, 0.012 * s, 0.03 * s, 8), [-0.1 * s, 0.985 * s, 0.15 * s]), { bone: 'chest', color: 0x9a1818, rough: 0.8, flex: 0.55 });
 }
 
 // ---------------------------------------------------------------- 身体
@@ -170,24 +177,33 @@ function legChain(P, sd) {
     ['foot_' + S, P.foot.clone().setX(P.foot.x * sd).setY(P.foot.y + 0.03 * P.s), V(0, -1, 0), 0.025 * P.s]];
 }
 
-// 上身袍（车削椭圆），weights: hips→spine→chest + 肩部少量跟随手臂
+// 躯干蒙皮权重：hips→spine→chest + 肩部少量跟随手臂
+const torsoWeights = (s) => (v) => {
+  const tS = sm(1.02 * s, 1.1 * s, v.y), tC = sm(1.18 * s, 1.26 * s, v.y);
+  let w = [['hips', 1 - tS], ['spine', tS * (1 - tC)], ['chest', tS * tC]];
+  const ax = Math.abs(v.x);
+  const armW = sm(0.12 * s, 0.2 * s, ax) * sm(1.3 * s, 1.42 * s, v.y) * 0.55;
+  if (armW > 0) { w = w.map(([b, x]) => [b, x * (1 - armW)]); w.push(['arm_' + (v.x > 0 ? 'L' : 'R'), armW]); }
+  return w;
+};
+const TORSO_PROF = [[0.158, 0.9], [0.16, 1.0], [0.165, 1.12], [0.182, 1.26], [0.196, 1.36], [0.19, 1.42], [0.15, 1.47], [0.08, 1.5], [0.062, 1.51]];
+
+// 上身袍（车削椭圆）
 function buildTorso(rb, P, { color, sz = 0.66, bulk = 1, pat = 0.85, rough = 0.85, colorFn } = {}) {
   const s = P.s;
-  const prof = [[0.158, 0.9], [0.16, 1.0], [0.165, 1.12], [0.182, 1.26], [0.196, 1.36], [0.19, 1.42], [0.15, 1.47], [0.08, 1.5], [0.062, 1.51]]
-    .map(([r, y]) => [r * s * bulk, y * s]);
+  const prof = TORSO_PROF.map(([r, y]) => [r * s * bulk, y * s]);
   const g = lathe(prof, 28, 1, sz);
-  rb.add(g, {
-    weights: (v) => {
-      const tS = sm(1.02 * s, 1.1 * s, v.y), tC = sm(1.18 * s, 1.26 * s, v.y);
-      let w = [['hips', 1 - tS], ['spine', tS * (1 - tC)], ['chest', tS * tC]];
-      const ax = Math.abs(v.x);
-      const armW = sm(0.12 * s, 0.2 * s, ax) * sm(1.3 * s, 1.42 * s, v.y) * 0.55;
-      if (armW > 0) { w = w.map(([b, x]) => [b, x * (1 - armW)]); w.push(['arm_' + (v.x > 0 ? 'L' : 'R'), armW]); }
-      return w;
-    },
-    color, pat, rough, uvScale: [3, 2], colorFn,
-  });
+  rb.add(g, { weights: torsoWeights(s), color, pat, rough, uvScale: [3, 2], colorFn });
   return prof;
+}
+
+// 躯干外壳（甲胄 / 裂纹贴花），从 y0 到 y1，略大于躯干
+function buildTorsoShell(rb, P, { y0 = 1.0, y1 = 1.42, bulk = 1, sz = 0.66, grow = 1.03, region, color = 0xffffff, rough = 0.5, metal = 0, emis = 0 } = {}) {
+  const s = P.s;
+  const ys = [];
+  for (let i = 0; i <= 6; i++) ys.push(mix(y0, y1, i / 6));
+  const prof = ys.map((y) => [profileR(TORSO_PROF, y) * bulk * grow * s, y * s]);
+  rb.add(lathe(prof, 32, 1, sz), { weights: torsoWeights(s), decal: region, color, rough, metal, emis });
 }
 
 // 下摆（裙袍），腿部跟随
@@ -204,12 +220,12 @@ function buildSkirt(rb, P, { color, hemY = 0.3, topY = 1.02, rTop = 0.165, rHem 
       return [['hips', 1 - d], ['thigh_L', d * side], ['thigh_R', d * (1 - side)]];
     },
     colorFn: (v, c) => c.copy(base).multiplyScalar(mix(darkHem, 1, sm(hemY * s, (hemY + 0.5) * s, v.y))),
-    pat, rough, uvScale: [4, 3],
+    pat, rough, uvScale: [4, 3], flex: hemFlex(hemY, s),
   });
   return prof;
 }
 
-function buildHemBand(rb, P, prof, { from, to, sz = 0.74, color = 0xffffff, region = REGION.waves, rough = 0.6, metal = 0.1, legFollow = 0.8, topY = 1.02 } = {}) {
+function buildHemBand(rb, P, prof, { from, to, sz = 0.74, color = 0xffffff, region = REGION.waves, rough = 0.6, metal = 0.1, legFollow = 0.8, topY = 1.02, hemY = from } = {}) {
   const s = P.s;
   const ys = [];
   for (let i = 0; i <= 4; i++) ys.push(mix(from * s, to * s, i / 4));
@@ -221,7 +237,7 @@ function buildHemBand(rb, P, prof, { from, to, sz = 0.74, color = 0xffffff, regi
       const side = sm(-0.06 * s, 0.06 * s, v.x);
       return [['hips', 1 - d], ['thigh_L', d * side], ['thigh_R', d * (1 - side)]];
     },
-    decal: region, color, rough, metal,
+    decal: region, color, rough, metal, flex: hemFlex(hemY, s),
   });
 }
 
@@ -247,7 +263,7 @@ function buildSleeves(rb, P, { color, rWrist = 0.1, rShoulder = 0.068, cuff = tr
       const q = new THREE.Quaternion().setFromUnitVectors(V(0, -1, 0), df);
       tg.applyQuaternion(q);
       tg.translate(end.x, end.y, end.z);
-      parts.push([tg, { bone: 'fore_' + sd2S(sd), color: shade(color, 0.8), pat: 0.6, rough: 0.9 }]);
+      parts.push([tg, { bone: 'fore_' + sd2S(sd), color: shade(color, 0.8), pat: 0.6, rough: 0.9, flex: hangFrom(end, tatter * s + 0.02, 1) }]);
     }
     return parts;
   });
@@ -355,7 +371,7 @@ function buildBelt(rb, P, { color = 0x1a1410, buckle = 0xc9a040, y = 1.0, r = 0.
 }
 
 // 毛刺簇（毛僵、犼）
-function furTufts(rb, bone, center, count, len, spreadR, color, seed = 1, dir = V(0, 1, 0), s = 1) {
+function furTufts(rb, bone, center, count, len, spreadR, color, seed = 1, dir = V(0, 1, 0), s = 1, flex = 0) {
   let q = seed;
   const R = () => { q = (q * 16807) % 2147483647; return (q % 10000) / 10000; };
   for (let i = 0; i < count; i++) {
@@ -366,7 +382,7 @@ function furTufts(rb, bone, center, count, len, spreadR, color, seed = 1, dir = 
     g.translate(0, len * 0.4, 0);
     g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), d));
     g.translate(center.x + off.x, center.y + off.y, center.z + off.z);
-    rb.add(g, { bone, color: shade(color, 0.8 + R() * 0.4), rough: 0.9 });
+    rb.add(g, { bone, color: shade(color, 0.8 + R() * 0.4), rough: 0.9, flex: flex ? hangFrom(center, len * 1.2, flex) : 0 });
   }
 }
 
@@ -398,10 +414,10 @@ export function buildJiangshi(type) {
   buildLapel(rb, P, L.ornate ? 0xe0a040 : 0xc9a040);
   buildRankBadge(rb, P, L.badge === 'sun' ? REGION.sun : REGION.crane);
   const prof = buildSkirt(rb, P, { color: L.robe, hemY: 0.3, legFollow: 0.25 });
-  buildHemBand(rb, P, prof, { from: 0.3, to: 0.56, color: L.hem, legFollow: 0.25 });
+  buildHemBand(rb, P, prof, { from: 0.3, to: 0.56, color: L.hem, legFollow: 0.25, hemY: 0.3 });
   if (L.tatter) {
     const tg = tatters(0.3, 0.33, 34, 0.05, L.tatter, 0.035, 1.0, 0.74, 11, 0.25);
-    rb.add(tg, { weights: (v) => [['hips', 1]], color: shade(L.robe, 0.75), pat: 0.7, rough: 0.9 });
+    rb.add(tg, { weights: (v) => [['hips', 1]], color: shade(L.robe, 0.75), pat: 0.7, rough: 0.9, flex: hang(0.36, L.tatter, 1.1) });
   }
   buildSleeves(rb, P, { color: L.robe, cuffColor: L.cuff, tatter: L.tatter ? L.tatter * 0.5 : 0 });
   buildHands(rb, P, { color: L.skin, clawLen: L.claws, clawColor: L.clawColor, curl: 0.55 });
@@ -415,7 +431,7 @@ export function buildJiangshi(type) {
       const len = 0.35 + (i % 3) * 0.08;
       const pts = [V(x, 1.72, z), V(x * 1.25, 1.62, z * 1.2), V(x * 1.6, 1.5, z * 1.35 - 0.02), V(x * 1.7, 1.72 - len, z * 1.5 - 0.02)];
       rb.add(tube(pts, (t) => 0.018 * (1 - t * 0.7), 0, 8, 5), {
-        weights: (v) => { const t = sm(1.45, 1.6, v.y); return [['head', t], ['chest', 1 - t]]; }, color: 0xe4e2da, rough: 0.5,
+        weights: (v) => { const t = sm(1.45, 1.6, v.y); return [['head', t], ['chest', 1 - t]]; }, color: 0xe4e2da, rough: 0.5, flex: hang(1.62, len, 0.8),
       });
     }
   }
@@ -436,7 +452,7 @@ export function buildJiangshi(type) {
       const a = (i / 7) * Math.PI * 2 + 0.4;
       const g = curvedPlane(0.05, 0.62 + (i % 3) * 0.1, -0.12, 2, 10, 0.25);
       place(g, [Math.sin(a) * 0.24, 0.62 - (i % 3) * 0.05, Math.cos(a) * 0.18], [0, a, 0]);
-      rb.add(g, { weights: () => [['hips', 1]], color: L.streamers, emis: 0.6, rough: 0.4 });
+      rb.add(g, { weights: () => [['hips', 1]], color: L.streamers, emis: 0.6, rough: 0.4, flex: hang(0.95, 0.7, 1.4) });
     }
   }
   if (L.embers) {
@@ -480,9 +496,9 @@ export function buildHou() {
   const tg = tatters(0.3, 0.45, 40, 0.1, 0.34, 0.035, 1.0, 0.74, 3, 0.3);
   rb.add(tg, {
     weights: (v) => { const side = sm(-0.06, 0.06, v.x); return [['hips', 0.4], ['thigh_L', 0.6 * side], ['thigh_R', 0.6 * (1 - side)]]; },
-    colorFn: (v, c) => c.set(v.y < 0.25 ? 0x6a0e0e : 0x241a1c), pat: 0.6, rough: 0.9,
+    colorFn: (v, c) => c.set(v.y < 0.25 ? 0x6a0e0e : 0x241a1c), pat: 0.6, rough: 0.9, flex: hang(0.46, 0.34, 1.0),
   });
-  buildHemBand(rb, P, prof, { from: 0.42, to: 0.6, color: 0x9a3030, legFollow: 0.7 });
+  buildHemBand(rb, P, prof, { from: 0.42, to: 0.6, color: 0x9a3030, legFollow: 0.7, hemY: 0.42 });
   // 肩甲 + 骨刺毛簇
   for (const sd of [1, -1]) {
     const g = lathe([[0.001, 0.09], [0.07, 0.07], [0.11, 0.02], [0.12, -0.04]], 16, 1, 0.9);
@@ -502,7 +518,7 @@ export function buildHou() {
   // 腰前红流苏
   for (let i = -1; i <= 1; i++) {
     rb.add(tube([V(i * 0.05, 0.98, 0.14), V(i * 0.055, 0.8, 0.16), V(i * 0.06, 0.62, 0.16)], (t) => 0.012 * (1 - t * 0.3), 0, 8, 6), {
-      weights: () => [['hips', 1]], color: 0x9a1212, rough: 0.8,
+      weights: () => [['hips', 1]], color: 0x9a1212, rough: 0.8, flex: hang(0.98, 0.36, 0.9),
     });
   }
   buildLegs(rb, P, { color: 0x1a1618, beast: 0x6a5c64, r: [0.09, 0.075, 0.06] });
@@ -547,7 +563,7 @@ export function buildImp() {
     weights: (v) => { const d = sm(0.95 * s, 0.72 * s, v.y) * 0.8; const side = sm(-0.04, 0.04, v.x); return [['hips', 1 - d], ['thigh_L', d * side], ['thigh_R', d * (1 - side)]]; },
     color: 0x7a1a14, pat: 0.8, rough: 0.9,
   });
-  rb.add(tatters(0.14 * s, 0.73 * s, 12, 0.03 * s, 0.1 * s, 0.03 * s, 1, 0.85, 17, 0.2), { weights: () => [['hips', 1]], color: 0x5a1210, rough: 0.9 });
+  rb.add(tatters(0.14 * s, 0.73 * s, 12, 0.03 * s, 0.1 * s, 0.03 * s, 1, 0.85, 17, 0.2), { weights: () => [['hips', 1]], color: 0x5a1210, rough: 0.9, flex: hang(0.74 * s, 0.1 * s, 0.8) });
   buildBareArms(rb, P, { color: skin, r: [0.04, 0.034, 0.03] });
   buildHands(rb, P, { color: skin, clawLen: 0.05, clawColor: 0x1a1a10, curl: 0.6, size: 1.2 });
   // 细腿
@@ -567,9 +583,9 @@ export function buildImp() {
   });
   // 尾巴
   rb.add(tube([V(0, 0.9 * s, -0.08 * s), V(0, 0.75 * s, -0.25 * s), V(0.05 * s, 0.6 * s, -0.35 * s), V(0.08 * s, 0.7 * s, -0.48 * s)], (t) => 0.025 * s * (1 - t * 0.8), 0, 12, 6), {
-    weights: () => [['hips', 1]], color: skin, rough: 0.6,
+    weights: () => [['hips', 1]], color: skin, rough: 0.6, flex: (v) => Math.min(1, Math.max(0, -v.z / (0.5 * s) - 0.2)) * 1.6,
   });
-  rb.add(place(cone(0.03 * s, 0.07 * s, 4), [0.08 * s, 0.73 * s, -0.5 * s], [-0.8, 0, 0]), { bone: 'hips', color: 0x7a1a14, rough: 0.6 });
+  rb.add(place(cone(0.03 * s, 0.07 * s, 4), [0.08 * s, 0.73 * s, -0.5 * s], [-0.8, 0, 0]), { bone: 'hips', color: 0x7a1a14, rough: 0.6, flex: 1.4 });
   return rb.build({ kind: 'imp', typeId: 'imp' });
 }
 
@@ -632,9 +648,9 @@ export function buildGhost() {
   // 长裙拖地，下摆撕裂成缕
   const prof = buildSkirt(rb, P, { color: robe, hemY: 0.12, rTop: 0.14, rHem: 0.34, legFollow: 0.15, darkHem: 0.45 });
   rb.add(tatters(0.34, 0.14, 30, 0.1, 0.34, 0.04, 1, 0.74, 23, 0.35), {
-    weights: () => [['hips', 1]], colorFn: (v, c) => c.set(robe).multiplyScalar(0.3 + Math.max(0, v.y + 0.2) * 1.2), pat: 0.5, rough: 0.9,
+    weights: () => [['hips', 1]], colorFn: (v, c) => c.set(robe).multiplyScalar(0.3 + Math.max(0, v.y + 0.2) * 1.2), pat: 0.5, rough: 0.9, flex: hang(0.16, 0.34, 1.6),
   });
-  buildHemBand(rb, P, prof, { from: 0.9, to: 0.98, color: 0xe8c860, region: REGION.cuff, legFollow: 0.1, topY: 1.02 });
+  buildHemBand(rb, P, prof, { from: 0.9, to: 0.98, color: 0xe8c860, region: REGION.cuff, legFollow: 0.1, topY: 1.02, hemY: 0.12 });
   buildSleeves(rb, P, { color: robe, rWrist: 0.13, cuffColor: 0xe8c860, extraLen: 0.1, tatter: 0.2 });
   buildHands(rb, P, { color: skin, clawLen: 0.04, clawColor: 0x1a0a10, curl: 0.2 });
   // 长发：头后披散到腰，前额刘海遮面
@@ -646,7 +662,7 @@ export function buildGhost() {
     const len = 0.7 + ((i * 7) % 5) * 0.06;
     const pts = [V(x, c.y + 0.05, z), V(x * 1.35, c.y - 0.08, z * 1.2 - 0.03), V(x * 1.7, c.y - 0.3, z * 1.1 - 0.08), V(x * 1.8, c.y - len, z * 1.0 - 0.1)];
     rb.add(tube(pts, (t) => 0.028 * (1 - t * 0.6), 0, 10, 5), {
-      weights: (v) => { const t = sm(1.42, 1.58, v.y); return [['head', t], ['chest', 1 - t]]; }, color: hair, rough: 0.35,
+      weights: (v) => { const t = sm(1.42, 1.58, v.y); return [['head', t], ['chest', 1 - t]]; }, color: hair, rough: 0.35, flex: hang(c.y - 0.05, len, 1.1),
     });
   }
   for (let i = 0; i < 7; i++) {
@@ -687,10 +703,10 @@ export function buildWuchang(black = false) {
   buildTorso(rb, P, { color: robe, bulk: 0.95 });
   buildCollar(rb, P, trim);
   const prof = buildSkirt(rb, P, { color: robe, hemY: 0.1, rHem: 0.32, legFollow: 0.5, darkHem: black ? 0.9 : 0.7 });
-  buildHemBand(rb, P, prof, { from: 0.1, to: 0.2, color: black ? 0x6a6a78 : 0x9a9a90, region: REGION.cuff, legFollow: 0.5 });
+  buildHemBand(rb, P, prof, { from: 0.1, to: 0.2, color: black ? 0x6a6a78 : 0x9a9a90, region: REGION.cuff, legFollow: 0.5, hemY: 0.1 });
   buildBelt(rb, P, { color: black ? 0x2a2a30 : 0x6a6a70, buckle: 0x9a9aa0, y: 1.0, r: 0.165, sz: 0.68 });
   // 麻绳腰带垂坠
-  rb.add(tube([V(0.06, 0.98 * s, 0.13 * s), V(0.07, 0.8 * s, 0.15 * s), V(0.065, 0.62 * s, 0.15 * s)], 0.01 * s, 0.008 * s, 8, 6), { weights: () => [['hips', 1]], color: 0xc8b890, rough: 0.9 });
+  rb.add(tube([V(0.06, 0.98 * s, 0.13 * s), V(0.07, 0.8 * s, 0.15 * s), V(0.065, 0.62 * s, 0.15 * s)], 0.01 * s, 0.008 * s, 8, 6), { weights: () => [['hips', 1]], color: 0xc8b890, rough: 0.9, flex: hang(0.98 * s, 0.36 * s, 1) });
   buildSleeves(rb, P, { color: robe, rWrist: 0.15, cuffColor: black ? 0x5a5a66 : 0xd8d8d0, extraLen: 0.05 });
   buildHands(rb, P, { color: skin, clawLen: 0.02, curl: 0.55 });
   buildLegs(rb, P, { color: robe, boot: 0x0e0e10, shoe: 'shoe', sole: 0xd8d4c8 });
@@ -698,7 +714,7 @@ export function buildWuchang(black = false) {
     // 长舌
     const c = P.headC;
     rb.add(tube([V(0, c.y - 0.07 * s, c.z + 0.085 * s), V(0, c.y - 0.12 * s, c.z + 0.12 * s), V(0, c.y - 0.25 * s, c.z + 0.13 * s), V(0, 1.28 * s, 0.14 * s)], (t) => 0.024 * s * (1 - t * 0.35), 0, 14, 8), {
-      weights: (v) => { const t = sm(1.48 * s, 1.58 * s, v.y); return [['head', t], ['chest', 1 - t]]; }, color: 0xc81830, rough: 0.35,
+      weights: (v) => { const t = sm(1.48 * s, 1.58 * s, v.y); return [['head', t], ['chest', 1 - t]]; }, color: 0xc81830, rough: 0.35, flex: hang(1.5 * s, 0.25 * s, 0.35),
     });
     // 哭丧棒（纸条缠绕）
     const hp = V(-P.hand.x, P.hand.y, 0.0);
@@ -707,7 +723,7 @@ export function buildWuchang(black = false) {
       const y = hp.y + 0.55 * s - i * 0.03 * s;
       const g = curvedPlane(0.05 * s, 0.22 * s, 0.02, 2, 4, 0.1);
       place(g, [hp.x + Math.sin(i * 1.9) * 0.03, y - 0.12 * s, hp.z + 0.02 + Math.cos(i * 1.9) * 0.03], [0, i * 1.9, 0]);
-      rb.add(g, { bone: 'hand_R', color: 0xf8f8f4, rough: 0.9 });
+      rb.add(g, { bone: 'hand_R', color: 0xf8f8f4, rough: 0.9, flex: hang(y - 0.01 * s, 0.22 * s, 1.2) });
     }
   } else {
     // 锁链 + 令牌
@@ -758,19 +774,19 @@ export function buildPriest() {
   const hb = lathe([[profileR(prof, 0.36) * 1.01, 0.36], [profileR(prof, 0.42) * 1.01, 0.42]], 32, 1, 0.74);
   rb.add(hb, {
     weights: (v) => { const d = sm(0.97, 0.36, v.y) * 0.9; const side = sm(-0.06, 0.06, v.x); return [['hips', 1 - d], ['thigh_L', d * side], ['thigh_R', d * (1 - side)]]; },
-    color: trim, rough: 0.8,
+    color: trim, rough: 0.8, flex: hemFlex(0.36, 1),
   });
   buildSleeves(rb, P, { color: robe, rWrist: 0.13, cuff: true, cuffColor: 0x222222, cuffRegion: REGION.gold });
   buildHands(rb, P, { color: skin, curl: 0.5 });
   buildBelt(rb, P, { color: 0x121212, buckle: 0x7a1a14, y: 1.0, r: 0.165, h: 0.06 });
   // 腰间垂带
-  for (const x of [0.03, -0.03]) rb.add(tube([V(x, 0.98, 0.12), V(x * 1.4, 0.8, 0.14), V(x * 1.6, 0.6, 0.14)], 0.014, 0.012, 8, 6), { weights: () => [['hips', 1]], color: 0x121212, rough: 0.8 });
+  for (const x of [0.03, -0.03]) rb.add(tube([V(x, 0.98, 0.12), V(x * 1.4, 0.8, 0.14), V(x * 1.6, 0.6, 0.14)], 0.014, 0.012, 8, 6), { weights: () => [['hips', 1]], color: 0x121212, rough: 0.8, flex: hang(0.97, 0.38, 1) });
   // 符纸挂袋 + 铜铃
   rb.add(place(roundedBox(0.08, 0.1, 0.04, 0.012), [0.15, 0.93, 0.07], [0, 0.5, 0]), { bone: 'hips', color: 0x5a3a1a, rough: 0.8 });
   for (let i = 0; i < 3; i++) {
     const g = curvedPlane(0.035, 0.09, 0.01, 2, 4);
     place(g, [0.16 + i * 0.012, 0.9, 0.1 + i * 0.004], [0, 0.4, 0.1 - i * 0.1]);
-    rb.add(g, { bone: 'hips', decal: REGION.talisman, color: 0xffffff, rough: 0.9 });
+    rb.add(g, { bone: 'hips', decal: REGION.talisman, color: 0xffffff, rough: 0.9, flex: hang(0.945, 0.09, 0.7) });
   }
   rb.add(place(lathe([[0.001, 0.0], [0.02, -0.005], [0.028, -0.04], [0.03, -0.05]], 12), [-0.15, 0.95, 0.06]), { bone: 'hips', color: 0xc8a040, metal: 0.9, rough: 0.3 });
   // 背后桃木剑
@@ -792,6 +808,238 @@ export function buildPriest() {
   return rb.build({ kind: 'priest', typeId: 'priest' });
 }
 
+
+// =====================================================================
+//  v1.2 新角色：阴兵 / 玄阴子（人形 · 尸化）/ 玄清子（师父）
+// =====================================================================
+
+// 阴兵：鬼面钵胄、鱼鳞札甲、虎头盾、长枪
+export function buildSoldier() {
+  const rb = new RigBuilder('soldier');
+  const P = defineSkeleton(rb, 1.03, { headR: V(0.075, 0.105, 0.09) });
+  const s = P.s;
+  const skin = 0x7a8a9a, cloth = 0x1a1f2c, steel = 0x3a3e48, brass = 0xa88a40;
+  buildHead(rb, P, { skin, face: FACE.soldier, brow: true, ears: false });
+  buildNeck(rb, P, skin);
+  const c = P.headC;
+  const y0 = c.y + P.headR.y * 0.12;
+  const helm = lathe([[0.104, -0.02], [0.108, 0.04], [0.098, 0.1], [0.072, 0.15], [0.032, 0.176], [0.006, 0.18]].map(([r, y]) => [r * s, y * s]), 28, 0.95, 1.05);
+  place(helm, [c.x, y0, c.z - 0.005]);
+  rb.add(helm, { bone: 'head', color: steel, metal: 0.75, rough: 0.38 });
+  rb.add(place(torus(0.106 * s, 0.009 * s, 6, 30), [c.x, y0 - 0.012 * s, c.z - 0.005], [Math.PI / 2, 0, 0], [0.95, 1.05, 1]), { bone: 'head', color: brass, metal: 0.85, rough: 0.3 });
+  rb.add(place(cone(0.013 * s, 0.1 * s, 8), [c.x, y0 + 0.23 * s, c.z - 0.005]), { bone: 'head', color: brass, metal: 0.85, rough: 0.3 });
+  furTufts(rb, 'head', V(c.x, y0 + 0.19 * s, c.z - 0.005), 16, 0.1 * s, 0.015 * s, 0xa01212, 51, V(0, -1, -0.2), s, 0.9);
+  for (const a of [-1.25, -0.6, 0, 0.6, 1.25]) {
+    const g = curvedPlane(0.075 * s, 0.11 * s, 0.025, 3, 4);
+    place(g, [c.x - Math.sin(a) * 0.104 * s, y0 - 0.07 * s, c.z - Math.cos(a) * 0.104 * s], [0.18, a + Math.PI, 0]);
+    rb.add(g, { bone: 'head', decal: REGION.armor, color: 0xffffff, metal: 0.6, rough: 0.45 });
+  }
+  buildTorso(rb, P, { color: cloth, bulk: 1.06 });
+  buildTorsoShell(rb, P, { y0: 0.98, y1: 1.43, bulk: 1.06, grow: 1.045, region: REGION.armor, rough: 0.42, metal: 0.65 });
+  buildCollar(rb, P, 0x6a1010, 0.05);
+  // 护肩
+  for (const sd of [1, -1]) {
+    const g = lathe([[0.001, 0.1], [0.075, 0.08], [0.12, 0.02], [0.13, -0.05]], 18, 1, 0.92);
+    place(g, [sd * 0.2 * s, 1.44 * s, 0], [0, 0, -sd * 0.45]);
+    rb.add(g, { chain: armChain(P, sd, 0.06), decal: REGION.armor, color: 0xffffff, metal: 0.6, rough: 0.42 });
+  }
+  const prof = buildSkirt(rb, P, { color: cloth, hemY: 0.42, rTop: 0.17, rHem: 0.29, legFollow: 0.75, darkHem: 0.6 });
+  buildHemBand(rb, P, prof, { from: 0.5, to: 0.98, region: REGION.armor, color: 0xffffff, rough: 0.45, metal: 0.6, legFollow: 0.75, hemY: 0.42 });
+  buildBelt(rb, P, { color: 0x3a1a10, buckle: brass, y: 1.0, r: 0.176, h: 0.07 });
+  buildSleeves(rb, P, { color: cloth, rWrist: 0.065, rShoulder: 0.06, cuff: false });
+  rb.mirror((sd) => {
+    const { e, w } = armPts(P, sd);
+    return [loft([e.clone().lerp(w, 0.15), e.clone().lerp(w, 0.95)], [0.052 * s, 0.047 * s], { seg: 14, capStart: true, capEnd: true }), { chain: armChain(P, sd), color: steel, metal: 0.7, rough: 0.4 }];
+  });
+  buildHands(rb, P, { color: skin, clawLen: 0.012, curl: 0.75 });
+  buildLegs(rb, P, { color: cloth, boot: 0x141418 });
+  // 虎头盾（左前臂）
+  const sh = new THREE.CylinderGeometry(0.34 * s, 0.34 * s, 0.05 * s, 36, 1);
+  sh.rotateX(Math.PI / 2);
+  const shieldC = V(0.2 * s, 1.08 * s, 0.2 * s);
+  place(sh, [shieldC.x, shieldC.y, shieldC.z]);
+  rb.add(sh, { bone: 'fore_L', color: 0x3a1a10, rough: 0.6, metal: 0.2 });
+  const face = new THREE.CircleGeometry(0.33 * s, 36);
+  place(face, [shieldC.x, shieldC.y, shieldC.z + 0.027 * s]);
+  rb.add(face, { bone: 'fore_L', decal: REGION.tiger, color: 0xffffff, rough: 0.55, metal: 0.3 });
+  rb.add(place(torus(0.34 * s, 0.014 * s, 6, 40), [shieldC.x, shieldC.y, shieldC.z]), { bone: 'fore_L', color: brass, metal: 0.85, rough: 0.3 });
+  // 长枪（右手，枪尖朝前）
+  const hp = V(-P.hand.x, P.hand.y - 0.04 * s, 0.02);
+  rb.add(place(cyl(0.017 * s, 0.017 * s, 2.3 * s, 8), [hp.x, hp.y, hp.z + 0.25 * s], [Math.PI / 2, 0, 0]), { bone: 'hand_R', color: 0x3a2414, rough: 0.7 });
+  const tipZ = hp.z + 1.4 * s;
+  const blade = new THREE.ConeGeometry(0.035 * s, 0.34 * s, 4);
+  blade.rotateX(Math.PI / 2); blade.scale(1, 0.35, 1);
+  place(blade, [hp.x, hp.y, tipZ + 0.17 * s]);
+  rb.add(blade, { bone: 'hand_R', color: 0xc0c4cc, metal: 0.95, rough: 0.2, emis: 0.15 });
+  rb.add(place(cyl(0.028 * s, 0.02 * s, 0.06 * s, 10), [hp.x, hp.y, tipZ - 0.01 * s], [Math.PI / 2, 0, 0]), { bone: 'hand_R', color: brass, metal: 0.85, rough: 0.3 });
+  furTufts(rb, 'hand_R', V(hp.x, hp.y - 0.02 * s, tipZ - 0.04 * s), 14, 0.11 * s, 0.02 * s, 0xb01414, 61, V(0, -1, -0.3), s, 1);
+  return rb.build({ kind: 'soldier', typeId: 'soldier' });
+}
+
+// 玄阴子（人形）：白发高髻、黑玉道冠、玄色道袍紫里、七星黑剑、拂尘、腰悬黑符
+export function buildSorcerer() {
+  const rb = new RigBuilder('sorcerer');
+  const P = defineSkeleton(rb, 1.05, { headR: V(0.074, 0.106, 0.09) });
+  const s = P.s;
+  const skin = 0xd4d0cc, robe = 0x0d0b12, inner = 0x4a0c3a, hair = 0xe6e4de;
+  buildHead(rb, P, { skin, face: FACE.sorcerer, eyeGlow: 0xb050ff, brow: true });
+  buildNeck(rb, P, skin);
+  const c = P.headC, R = P.headR;
+  rb.add(place(sphere(1, 22, 16), [c.x, c.y + 0.016 * s, c.z - 0.012 * s], [0, 0, 0], [R.x * 1.08, R.y * 1.04, R.z * 1.06]), { bone: 'head', color: hair, rough: 0.45 });
+  rb.add(place(sphere(1, 16, 12), [c.x, c.y + R.y * 0.98, c.z - 0.02 * s], [0, 0, 0], [0.045 * s, 0.05 * s, 0.045 * s]), { bone: 'head', color: hair, rough: 0.45 });
+  const crown = lathe([[0.04, 0], [0.046, 0.02], [0.036, 0.05], [0.014, 0.07], [0.0, 0.072]].map(([r, y]) => [r * s, y * s]), 16, 1.2, 0.8);
+  place(crown, [c.x, c.y + R.y * 1.18, c.z - 0.02 * s]);
+  rb.add(crown, { bone: 'head', color: 0x101014, rough: 0.2, metal: 0.4 });
+  rb.add(place(sphere(0.012 * s, 10, 8), [c.x, c.y + R.y * 1.32, c.z + 0.012 * s]), { bone: 'head', color: 0xa040ff, emis: 2.4, rough: 0.2 });
+  rb.add(place(cyl(0.004 * s, 0.004 * s, 0.2 * s, 6), [c.x, c.y + R.y * 1.1, c.z - 0.02 * s], [0, 0, Math.PI / 2]), { bone: 'head', color: 0xc8a040, metal: 0.9, rough: 0.3 });
+  // 白发垂背
+  for (let i = 0; i < 18; i++) {
+    const a = Math.PI * (0.55 + (i / 17) * 0.9);
+    const x = Math.sin(a) * 0.075 * s, z = Math.cos(a) * 0.08 * s + c.z;
+    const len = (0.5 + ((i * 5) % 4) * 0.05) * s;
+    const pts = [V(x, c.y + 0.04 * s, z), V(x * 1.3, c.y - 0.1 * s, z - 0.03 * s), V(x * 1.5, c.y - 0.3 * s, z - 0.07 * s), V(x * 1.5, c.y - len, z - 0.08 * s)];
+    rb.add(tube(pts, (t) => 0.02 * s * (1 - t * 0.6), 0, 10, 5), {
+      weights: (v) => { const t = sm(1.42 * s, 1.58 * s, v.y); return [['head', t], ['chest', 1 - t]]; }, color: hair, rough: 0.45, flex: hang(c.y - 0.05 * s, len, 1.0),
+    });
+  }
+  // 长须
+  for (let i = 0; i < 9; i++) {
+    const x = (i / 8 - 0.5) * 0.05 * s;
+    const z = c.z + R.z * 0.7;
+    const pts = [V(x, c.y - R.y * 0.62, z), V(x * 1.2, c.y - R.y * 0.95, z + 0.02 * s), V(x * 0.8, c.y - 0.2 * s, z + 0.03 * s), V(x * 0.5, c.y - 0.3 * s, z + 0.02 * s)];
+    rb.add(tube(pts, (t) => 0.007 * s * (1 - t * 0.7), 0, 8, 4), {
+      weights: (v) => { const t = sm(1.48 * s, 1.58 * s, v.y); return [['head', t], ['chest', 1 - t]]; }, color: hair, rough: 0.5, flex: hang(c.y - R.y * 0.7, 0.2 * s, 0.6),
+    });
+  }
+  buildTorso(rb, P, { color: robe, pat: 0.9, rough: 0.7 });
+  rb.add(tube([V(0.06, 1.49, 0.03).multiplyScalar(s), V(0.02, 1.42, 0.12).multiplyScalar(s), V(-0.06, 1.3, 0.125).multiplyScalar(s), V(-0.12, 1.16, 0.11).multiplyScalar(s)], 0.016 * s, 0.016 * s, 16, 6), { bone: 'chest', color: inner, rough: 0.6 });
+  rb.add(tube([V(0.07, 1.49, 0.03).multiplyScalar(s), V(0.03, 1.42, 0.125).multiplyScalar(s), V(-0.05, 1.3, 0.13).multiplyScalar(s), V(-0.11, 1.16, 0.115).multiplyScalar(s)], 0.006 * s, 0.006 * s, 16, 4), { bone: 'chest', color: 0xc8a040, metal: 0.85, rough: 0.3 });
+  buildRankBadge(rb, P, REGION.taiji, 0.17, 0.124);
+  const prof = buildSkirt(rb, P, { color: robe, hemY: 0.05, rTop: 0.165, rHem: 0.36, legFollow: 0.55, darkHem: 0.8, pat: 0.9 });
+  buildHemBand(rb, P, prof, { from: 0.05, to: 0.16, region: REGION.robeTrim, color: 0xffffff, rough: 0.55, metal: 0.3, legFollow: 0.55, hemY: 0.05 });
+  rb.add(tatters(0.36, 0.08, 36, 0.04, 0.14, 0.035, 1, 0.74, 41, 0.3), { weights: () => [['hips', 1]], color: 0x1a0a20, rough: 0.9, flex: hang(0.09, 0.14, 1.4), emis: 0.15 });
+  buildSleeves(rb, P, { color: robe, rWrist: 0.17, extraLen: 0.09, cuffColor: 0xffffff, cuffRegion: REGION.robeTrim, tatter: 0.1 });
+  buildHands(rb, P, { color: skin, clawLen: 0.028, clawColor: 0x201020, curl: 0.4 });
+  buildBelt(rb, P, { color: inner, buckle: 0xa040ff, y: 1.0, r: 0.168, h: 0.06 });
+  for (let i = 0; i < 4; i++) {
+    const g = curvedPlane(0.04 * s, 0.13 * s, 0.01, 2, 5);
+    const a = -0.9 + i * 0.6;
+    place(g, [Math.sin(a) * 0.18 * s, 0.91 * s, Math.cos(a) * 0.13 * s], [0, a, 0.05 - i * 0.03]);
+    rb.add(g, { bone: 'hips', decal: REGION.talismanBlack, color: 0xffffff, rough: 0.8, emis: 0.4, flex: hang(0.975 * s, 0.13 * s, 1.1) });
+  }
+  buildLegs(rb, P, { color: robe, boot: 0x0c0c0e, shoe: 'shoe', sole: 0x2a1a30 });
+  // 七星黑剑（右手，剑尖朝下 → 抬臂后朝前）
+  const hp = V(-P.hand.x, P.hand.y - 0.05 * s, 0.01);
+  const bl = roundedBox(0.012 * s, 0.82 * s, 0.05 * s, 0.004 * s, 2);
+  place(bl, [hp.x, hp.y - 0.47 * s, hp.z]);
+  rb.add(bl, { bone: 'hand_R', color: 0x14141a, metal: 0.9, rough: 0.25 });
+  for (const sx of [1, -1]) {
+    const pl = new THREE.PlaneGeometry(0.03 * s, 0.7 * s);
+    place(pl, [hp.x + sx * 0.0068 * s, hp.y - 0.47 * s, hp.z], [0, sx * Math.PI / 2, 0]);
+    rb.add(pl, { bone: 'hand_R', decal: REGION.sevenStar, color: 0xffffff, emis: 1.6, rough: 0.3 });
+  }
+  rb.add(place(roundedBox(0.03 * s, 0.025 * s, 0.13 * s, 0.006 * s), [hp.x, hp.y - 0.05 * s, hp.z]), { bone: 'hand_R', color: 0x6a40a0, metal: 0.8, rough: 0.3 });
+  rb.add(place(cyl(0.014 * s, 0.015 * s, 0.13 * s, 8), [hp.x, hp.y + 0.03 * s, hp.z]), { bone: 'hand_R', color: 0x200c18, rough: 0.7 });
+  // 拂尘（左手）
+  const lp = V(P.hand.x, P.hand.y - 0.03 * s, 0.02);
+  rb.add(place(cyl(0.012 * s, 0.012 * s, 0.32 * s, 8), [lp.x, lp.y + 0.1 * s, lp.z]), { bone: 'hand_L', color: 0x3a2412, rough: 0.6 });
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const top = V(lp.x + Math.cos(a) * 0.012 * s, lp.y - 0.06 * s, lp.z + Math.sin(a) * 0.012 * s);
+    const pts = [top, top.clone().add(V(Math.cos(a) * 0.02 * s, -0.15 * s, Math.sin(a) * 0.02 * s)), top.clone().add(V(Math.cos(a) * 0.03 * s, -0.4 * s, Math.sin(a) * 0.03 * s))];
+    rb.add(tube(pts, (t) => 0.006 * s * (1 - t * 0.5), 0, 6, 4), { bone: 'hand_L', color: 0xf4f2ee, rough: 0.6, flex: hangFrom(top, 0.4 * s, 1.2) });
+  }
+  return rb.build({ kind: 'sorcerer', typeId: 'sorcerer' });
+}
+
+// 玄阴子（尸化）：犼血入体，佝偻巨躯、鬼角、灼裂皮肤、利爪兽足
+export function buildSorcererBeast() {
+  const rb = new RigBuilder('sorcererBeast');
+  const P = defineSkeleton(rb, 1.24, { arm: V(0.21, 1.44, 0), fore: V(0.28, 1.15, 0.03), hand: V(0.32, 0.88, 0.05) });
+  const s = P.s;
+  const skin = 0x55645a, robe = 0x0e0a12, hair = 0xdad8d0;
+  buildHead(rb, P, { skin, face: FACE.beast, brow: true, fangs: 0.034, eyeGlow: 0xff3010, pointyEars: true });
+  buildNeck(rb, P, skin);
+  const c = P.headC;
+  for (const sd of [1, -1]) {
+    const g = horn(0.26 * s, 0.03 * s, 1.5);
+    place(g, [sd * 0.05 * s, c.y + 0.08 * s, c.z + 0.01 * s], [-0.35, 0, -sd * 0.5]);
+    rb.add(g, { bone: 'head', color: 0x1a1018, rough: 0.3, metal: 0.2 });
+    const g2 = horn(0.14 * s, 0.018 * s, 1.1);
+    place(g2, [sd * 0.08 * s, c.y + 0.01 * s, c.z - 0.02 * s], [-0.7, 0, -sd * 1.25]);
+    rb.add(g2, { bone: 'head', color: 0x2a1820, rough: 0.3 });
+  }
+  for (let i = 0; i < 20; i++) {
+    const a = Math.PI * (0.3 + (i / 19) * 1.4);
+    const x = Math.sin(a) * 0.08 * s, z = Math.cos(a) * 0.085 * s + c.z;
+    const len = (0.45 + ((i * 7) % 5) * 0.06) * s;
+    const pts = [V(x, c.y + 0.06 * s, z), V(x * 1.6, c.y - 0.05 * s, z - 0.05 * s), V(x * 2.2, c.y - 0.25 * s, z - 0.1 * s), V(x * 2.4, c.y - len, z - 0.12 * s)];
+    rb.add(tube(pts, (t) => 0.022 * s * (1 - t * 0.6), 0, 10, 5), {
+      weights: (v) => { const t = sm(1.42 * s, 1.6 * s, v.y); return [['head', t], ['chest', 1 - t]]; }, color: hair, rough: 0.5, flex: hang(c.y - 0.04 * s, len, 1.3),
+    });
+  }
+  buildTorso(rb, P, { color: skin, bulk: 1.18, pat: 0.2, rough: 0.6 });
+  buildTorsoShell(rb, P, { y0: 0.95, y1: 1.46, bulk: 1.18, grow: 1.012, region: REGION.cracks, emis: 2.6, rough: 0.5 });
+  const prof = buildSkirt(rb, P, { color: robe, hemY: 0.38, rTop: 0.19, rHem: 0.32, legFollow: 0.75, darkHem: 0.5 });
+  rb.add(tatters(0.32, 0.41, 40, 0.08, 0.3, 0.04, 1, 0.74, 77, 0.3), { weights: (v) => { const sd = sm(-0.06, 0.06, v.x); return [['hips', 0.4], ['thigh_L', 0.6 * sd], ['thigh_R', 0.6 * (1 - sd)]]; }, color: 0x1a0a16, rough: 0.9, flex: hang(0.42, 0.3, 1.2) });
+  buildHemBand(rb, P, prof, { from: 0.38, to: 0.5, region: REGION.robeTrim, color: 0xffffff, legFollow: 0.75, hemY: 0.38 });
+  for (const sd of [1, -1]) {
+    for (let k = 0; k < 6; k++) {
+      const cg = cone(0.022 * s, 0.18 * s, 6);
+      place(cg, [sd * (0.16 + k * 0.025) * s, (1.52 + (k % 2) * 0.03) * s, (-0.06 + k * 0.02) * s], [0.2 - k * 0.12, 0, -sd * (0.3 + k * 0.14)]);
+      rb.add(cg, { bone: 'arm_' + sd2S(sd), color: 0xd8ccb0, rough: 0.4 });
+    }
+  }
+  buildBareArms(rb, P, { color: skin, r: [0.058, 0.054, 0.048] });
+  buildHands(rb, P, { color: skin, clawLen: 0.1, clawColor: 0x120a10, curl: 0.75, size: 1.45, thick: 1.4 });
+  buildLegs(rb, P, { color: robe, beast: 0x45524a, r: [0.095, 0.08, 0.065] });
+  return rb.build({ kind: 'sorcererBeast', typeId: 'sorcererBeast' });
+}
+
+// 玄清子：茅山掌教，靛青道袍、偃月冠、白须长眉、手持拂尘
+export function buildMaster() {
+  const rb = new RigBuilder('master');
+  const P = defineSkeleton(rb, 1, { headR: V(0.075, 0.107, 0.09) });
+  const s = 1;
+  const skin = 0xd8b494, robe = 0x1e2a44, hair = 0xcac8c2;
+  buildHead(rb, P, { skin, face: FACE.master });
+  buildNeck(rb, P, skin);
+  const c = P.headC, R = P.headR;
+  rb.add(place(sphere(1, 20, 14), [c.x, c.y + 0.014, c.z - 0.014], [0, 0, 0], [R.x * 1.06, R.y * 1.02, R.z * 1.04]), { bone: 'head', color: hair, rough: 0.5 });
+  rb.add(place(sphere(1, 14, 10), [c.x, c.y + R.y * 0.95, c.z - 0.015], [0, 0, 0], [0.04, 0.045, 0.04]), { bone: 'head', color: hair, rough: 0.5 });
+  const moon = torus(0.03, 0.009, 6, 14, Math.PI * 1.2);
+  place(moon, [c.x, c.y + R.y * 1.12, c.z - 0.01], [0, 0, -Math.PI * 0.1]);
+  rb.add(moon, { bone: 'head', color: 0xc8a040, metal: 0.85, rough: 0.3 });
+  rb.add(place(cyl(0.004, 0.004, 0.17, 6), [c.x, c.y + R.y * 1.0, c.z - 0.015], [0, 0, Math.PI / 2]), { bone: 'head', color: 0x5a3a1a, rough: 0.6 });
+  for (let i = 0; i < 11; i++) {
+    const x = (i / 10 - 0.5) * 0.06;
+    const z = c.z + R.z * 0.72;
+    const pts = [V(x, c.y - R.y * 0.6, z), V(x * 1.1, c.y - R.y * 0.95, z + 0.02), V(x * 0.8, c.y - 0.22, z + 0.03), V(x * 0.4, c.y - 0.34, z + 0.02)];
+    rb.add(tube(pts, (t) => 0.008 * (1 - t * 0.7), 0, 8, 4), {
+      weights: (v) => { const t = sm(1.46, 1.58, v.y); return [['head', t], ['chest', 1 - t]]; }, color: 0xeeece6, rough: 0.5, flex: hang(c.y - R.y * 0.7, 0.24, 0.6),
+    });
+  }
+  buildTorso(rb, P, { color: robe, pat: 0.8 });
+  rb.add(tube([V(0.06, 1.49, 0.03), V(0.02, 1.42, 0.12), V(-0.06, 1.3, 0.125), V(-0.12, 1.18, 0.112)], 0.013, 0.013, 16, 6), { bone: 'chest', color: 0xeae4d8, rough: 0.8 });
+  buildRankBadge(rb, P, REGION.taiji, 0.18, 0.124);
+  const prof = buildSkirt(rb, P, { color: robe, hemY: 0.12, rTop: 0.165, rHem: 0.32, legFollow: 0.6, darkHem: 0.85 });
+  const hb = lathe([[profileR(prof, 0.12) * 1.01, 0.12], [profileR(prof, 0.19) * 1.01, 0.19]], 32, 1, 0.74);
+  rb.add(hb, { weights: (v) => { const d = sm(0.97, 0.12, v.y) * 0.6; const sd = sm(-0.06, 0.06, v.x); return [['hips', 1 - d], ['thigh_L', d * sd], ['thigh_R', d * (1 - sd)]]; }, color: 0xeae4d8, rough: 0.8, flex: hemFlex(0.12, 1) });
+  buildSleeves(rb, P, { color: robe, rWrist: 0.15, extraLen: 0.06, cuffColor: 0xeae4d8, cuffRegion: REGION.cuff });
+  buildHands(rb, P, { color: skin, curl: 0.45 });
+  buildBelt(rb, P, { color: 0xeae4d8, buckle: 0x5a8a6a, y: 1.0, r: 0.166, h: 0.05 });
+  buildLegs(rb, P, { color: robe, boot: 0x0e0e0e, shoe: 'shoe', sock: 0xeae6dc });
+  const lp = V(P.hand.x, P.hand.y - 0.03, 0.02);
+  rb.add(place(cyl(0.012, 0.012, 0.3, 8), [lp.x, lp.y + 0.1, lp.z]), { bone: 'hand_L', color: 0x6a4a2a, rough: 0.6 });
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const top = V(lp.x + Math.cos(a) * 0.012, lp.y - 0.05, lp.z + Math.sin(a) * 0.012);
+    const pts = [top, top.clone().add(V(Math.cos(a) * 0.02, -0.15, Math.sin(a) * 0.02)), top.clone().add(V(Math.cos(a) * 0.03, -0.38, Math.sin(a) * 0.03))];
+    rb.add(tube(pts, (t) => 0.006 * (1 - t * 0.5), 0, 6, 4), { bone: 'hand_L', color: 0xf4f2ee, rough: 0.6, flex: hangFrom(top, 0.38, 1.2) });
+  }
+  return rb.build({ kind: 'master', typeId: 'master' });
+}
+
 // ---------------------------------------------------------------- 注册
 export const CHARACTER_BUILDERS = {
   normal: () => buildJiangshi('normal'),
@@ -808,6 +1056,10 @@ export const CHARACTER_BUILDERS = {
   wuWhite: () => buildWuchang(false),
   wuBlack: () => buildWuchang(true),
   priest: buildPriest,
+  soldier: buildSoldier,
+  sorcerer: buildSorcerer,
+  sorcererBeast: buildSorcererBeast,
+  master: buildMaster,
 };
 
 const _cache = {};

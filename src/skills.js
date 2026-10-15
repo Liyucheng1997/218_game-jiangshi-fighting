@@ -355,7 +355,7 @@ export class SkillSystem {
       if (d.t <= 0) {
         const p = d.inst.root.position.clone().setY(0.5);
         this.ctx.effects.fireBurst(p, 4);
-        Audio.explosion();
+        Audio.explosion(p);
         for (const e of this.ctx.enemies.queryRadius(p, 4)) this.ctx.enemies.damage(e, this.dmg(60 + this.lv('paperman') * 30), { type: 'fire', knock: 0.6, dir: e.root.position.clone().sub(p).setY(0).normalize() });
         this.scene.remove(d.inst.root);
         this.decoyInst.splice(i, 1);
@@ -498,7 +498,7 @@ export class SkillSystem {
     top.x += (Math.random() - 0.5) * 3;
     const hit = E.center(e);
     this.ctx.effects.bolt(top, hit.clone().setY(e.root.position.y));
-    Audio.thunder();
+    Audio.thunder(hit);
     this.ctx.shake?.(0.15);
     E.damage(e, dmg, { type: 'art', stun: 0.35 });
     for (const o of E.queryRadius(e.root.position, 1.2)) if (o !== e) E.damage(o, dmg * 0.5, { type: 'art', stun: 0.2 });
@@ -533,7 +533,7 @@ export class SkillSystem {
           FX.pillar(p, 0xc0b0ff, 6, 0.9, 0.45);
           FX.shockRing(p, 2.0, 0xc0b0ff, 0.4);
           FX.flashLight(p.clone().setY(1), 0xb0a0ff, 40, 0.25, 8);
-          Audio.thunder();
+          Audio.thunder(p);
           for (const e of E.queryRadius(p, 1.9)) E.damage(e, dmg, { type: 'art', stun: 0.3 });
         }
       },
@@ -649,8 +649,9 @@ export class SkillSystem {
       const s = buildPeachSword();
       s.scale.setScalar(1.25);
       s.traverse((o) => { if (o.isMesh) { o.castShadow = false; } });
-      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: 0xffa060, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.6 }));
-      glow.scale.setScalar(0.6); glow.position.z = -0.35; s.add(glow);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: 0xffa060, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5 }));
+      glow.scale.setScalar(0.42); glow.position.z = -0.35; s.add(glow);
+      s.userData.glow = glow;
       s.userData.hit = new Map();
       this.scene.add(s);
       this.swordMeshes.push(s);
@@ -690,6 +691,12 @@ export class SkillSystem {
         const tan = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a));
         s.lookAt(home.clone().sub(tan));
       }
+      // 环绕的剑会扫过第三人称镜头：贴近镜头时收小、熄光、最后隐去，不糊住画面
+      const cam = this.ctx.camera;
+      const near = cam ? Math.min(1, Math.max(0, (s.position.distanceTo(cam.position) - 0.9) / 2.2)) : 1;
+      s.visible = near > 0.03;
+      s.scale.setScalar(1.25 * (0.55 + 0.45 * near));
+      s.userData.glow.material.opacity = 0.5 * near * near;
       const hitMap = s.userData.hit;
       for (const [e, t] of hitMap) { if (t - dt <= 0) hitMap.delete(e); else hitMap.set(e, t - dt); }
       for (const e of E.queryRadius(s.position, 0.55)) {
@@ -769,7 +776,7 @@ export class SkillSystem {
     const hits = E.queryRadius(p, r);
     for (const e of hits) E.damage(e, this.stats.fuDmg, { type: 'fire', knock: 0.5, dir: e.root.position.clone().sub(p).setY(0).normalize(), burn: 8, burnT: 2 });
     this.ctx.effects.fireBurst(p, r);
-    Audio.explosion();
+    Audio.explosion(p);
     this.ctx.shake?.(0.25);
     if (this.stats.fuBurn) this._field('fire', p.clone().setY(0), r * 0.8, 3, { dps: this.stats.fuBurn });
     this.ctx.onFuHit?.(hits.length);
@@ -785,18 +792,19 @@ export class SkillSystem {
     this.ult = 0;
     const E = this.ctx.enemies, FX = this.ctx.effects;
     const feet = new THREE.Vector3(player.position.x, 0, player.position.z);
-    FX.baguaDecal(feet, 10, 2.2, 0xffe080);
+    FX.baguaDecal(feet, 10, 2.2, 0xffe080, 0.75);
     FX.shockRing(feet, 26, 0xffe080, 1.2);
-    FX.pillar(feet, 0xffe8a0, 30, 2.5, 1.2);
-    Audio.gong();
+    FX.pillar(feet, 0xffe8a0, 30, 1.3, 1.2);
+    Audio.ultCast();
     this.ctx.shake?.(0.6);
+    this.ctx.onUlt?.();
     const targets = E.list.filter((e) => e.alive && e.root.position.distanceTo(feet) < 28);
     targets.sort(() => Math.random() - 0.5);
     targets.forEach((e, i) => {
       this.later(0.2 + (i % 20) * 0.06, () => {
         if (!e.alive) return;
         FX.bolt(E.center(e).setY(20), E.center(e).setY(e.root.position.y), 0xffe8a0, 0.2, 0.3);
-        Audio.thunder();
+        Audio.thunder(e.root.position);
         E.damage(e, this.dmg(e.boss ? 400 : 260), { type: 'art', stun: 1.5 });
       });
     });

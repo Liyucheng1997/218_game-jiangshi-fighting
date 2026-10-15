@@ -35,8 +35,10 @@ export class Pickups {
       vertexShader: `attribute float size; attribute vec3 color; varying vec3 vC; uniform float scale; uniform float time;
         void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position + vec3(0.0, sin(time*3.0 + position.x*2.0)*0.06, 0.0), 1.0);
         gl_PointSize = size * scale / max(0.1, -mv.z); gl_Position = projectionMatrix * mv; }`,
-      fragmentShader: `uniform sampler2D map; varying vec3 vC; void main(){ vec4 t = texture2D(map, gl_PointCoord); float core = smoothstep(0.35, 0.0, length(gl_PointCoord-0.5));
-        gl_FragColor = vec4(vC * (1.0 + core * 1.5), t.a); if (gl_FragColor.a < 0.02) discard; }`,
+      // 小而亮的彩色内核 + 柔和光晕（避免叠加泛光后一律变成白球）
+      fragmentShader: `uniform sampler2D map; varying vec3 vC; void main(){ vec4 t = texture2D(map, gl_PointCoord); float core = smoothstep(0.2, 0.02, length(gl_PointCoord-0.5));
+        float a = max(t.a * t.a * 0.75, core);
+        gl_FragColor = vec4(vC * (0.6 + core * 1.1), a); if (gl_FragColor.a < 0.02) discard; }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     this.points = new THREE.Points(g, this.mat);
@@ -112,8 +114,31 @@ export class Pickups {
     this.items.push({ obj: g, kind: 'chest', t: 0, life: 999 });
   }
 
+  // 茅山残卷：发光卷轴 + 光柱
+  dropScroll(pos, id) {
+    const g = new THREE.Group();
+    const paper = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.62, 16), new THREE.MeshStandardMaterial({ color: 0xe8d8b0, roughness: 0.8, emissive: 0x403010 }));
+    paper.rotation.z = Math.PI / 2; paper.position.y = 0.5; g.add(paper);
+    for (const x of [-0.34, 0.34]) {
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 8), new THREE.MeshStandardMaterial({ color: 0x5a1a10, roughness: 0.6 }));
+      cap.rotation.z = Math.PI / 2; cap.position.set(x, 0.5, 0); g.add(cap);
+    }
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.012, 6, 16), new THREE.MeshStandardMaterial({ color: 0xc01818 }));
+    tie.rotation.y = Math.PI / 2; tie.position.y = 0.5; g.add(tie);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDotTexture(), color: 0xffe8a0, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9 }));
+    glow.scale.setScalar(1.6); glow.position.y = 0.5; g.add(glow);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.35, 9, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    beam.position.y = 4.5; g.add(beam);
+    g.position.set(pos.x, 0, pos.z);
+    this.scene.add(g);
+    this.items.push({ obj: g, kind: 'scroll', id, t: 0, life: 999 });
+  }
+
   // 全屏吸取（首领死亡时）
   vacuum() { for (let i = 0; i < this.n; i++) this.pull[i] = 1; }
+
+  // 指定种类的掉落物飞向道长（过关时把残卷收回来，不必在清场倒计时里奔去捡）
+  attract(kind) { for (const it of this.items) if (it.kind === kind) it.pull = true; }
 
   update(dt, player, magnet, onXp, onItem) {
     this.mat.uniforms.time.value += dt;
@@ -157,11 +182,17 @@ export class Pickups {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       it.t += dt;
-      it.obj.rotation.y += dt * 1.5;
-      it.obj.position.y = (it.kind === 'chest' ? 0 : 0.15) + Math.abs(Math.sin(it.t * 2)) * 0.12;
+      it.obj.rotation.y += dt * (it.pull ? 8 : 1.5);
+      it.obj.position.y = (it.kind === 'chest' || it.kind === 'scroll' ? 0 : 0.15) + Math.abs(Math.sin(it.t * 2)) * 0.12 + (it.pull ? 0.6 : 0);
+      if (it.pull) {
+        it.pullV = Math.min(16, (it.pullV || 1.5) + dt * 12);
+        const ddx = px - it.obj.position.x, ddz = pz - it.obj.position.z, dl = Math.hypot(ddx, ddz) || 1;
+        const stp = Math.min(dl, it.pullV * dt);
+        it.obj.position.x += ddx / dl * stp; it.obj.position.z += ddz / dl * stp;
+      }
       const d = Math.hypot(px - it.obj.position.x, pz - it.obj.position.z);
       if (d < 1.2) {
-        onItem(it.kind, it.obj.position.clone());
+        onItem(it.kind, it.obj.position.clone(), it);
         this.scene.remove(it.obj);
         this.items.splice(i, 1);
         continue;

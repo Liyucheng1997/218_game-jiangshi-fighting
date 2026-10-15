@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { getAtlas, getDamask, ATLAS_SIZE } from './textures.js';
+import { getAtlas, getDamask, ATLAS_W, ATLAS_H } from './textures.js';
 
 // =====================================================================
 //  程序化蒙皮角色构建器
@@ -18,26 +18,100 @@ function smooth(e0, e1, x) {
   return t * t * (3 - 2 * t);
 }
 
-// ---------------------------------------------------------------- 超级材质
-// 顶点属性 pbr = (roughness, metalness, emissive, patternMix)
-function patchUber(material) {
-  material.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 pbr;\nvarying vec4 vPbr;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPbr = pbr;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec4 vPbr;')
-      .replace('#include <map_fragment>', `
+// ---------------------------------------------------------------- 超级材质 v2
+// 顶点属性 pbr = (roughness, metalness, emissive, patternMix)，flex = 布料/纸/发丝的柔性权重
+// 全局 uniform：时间、月光轮廓光；每实例 uniform：溶解、溶解边缘色、随机种子、腾空（袍摆鼓起）、风速、额外轮廓光
+export const UBER_SHARED = {
+  uTime: { value: 0 },
+  uRimColor: { value: new THREE.Color(0.32, 0.42, 0.68) },
+  uRimStrength: { value: 0.55 },
+  uMoonView: { value: new THREE.Vector3(0, 1, 0) },
+};
+
+export function makeUberUniforms() {
+  return {
+    uDissolve: { value: 0 },
+    uDissolveColor: { value: new THREE.Color(1.0, 0.42, 0.12) },
+    uSeed: { value: Math.random() },
+    uAir: { value: 0 },
+    uWind: { value: 0 },
+    uRimExtra: { value: new THREE.Color(0, 0, 0) },
+    uPulse: { value: 1 },
+  };
+}
+
+const UBER_VERT_HEAD = /* glsl */`#include <common>
+attribute vec4 pbr;
+attribute float flex;
+varying vec4 vPbr;
+varying vec3 vModelPos;
+uniform float uTime; uniform float uSeed; uniform float uAir; uniform float uWind;`;
+
+const UBER_VERT_FLEX = /* glsl */`#include <skinning_vertex>
+if ( flex > 0.0 ) {
+  float ph = uTime * 5.2 + uSeed * 6.2831;
+  vec3 p0 = position;
+  float amp = flex * ( 1.0 + uWind );
+  transformed.x += sin( ph + p0.y * 11.0 + p0.z * 5.0 ) * 0.016 * amp;
+  transformed.z += cos( ph * 0.77 + p0.y * 8.0 + p0.x * 6.0 ) * 0.02 * amp;
+  transformed.y += uAir * flex * 0.075;
+}`;
+
+const UBER_FRAG_HEAD = /* glsl */`#include <common>
+varying vec4 vPbr;
+varying vec3 vModelPos;
+uniform float uTime; uniform float uDissolve; uniform vec3 uDissolveColor;
+uniform vec3 uRimColor; uniform float uRimStrength; uniform vec3 uRimExtra; uniform float uPulse; uniform vec3 uMoonView;
+float ubHash( vec3 p ) { p = fract( p * 0.3183099 + 0.1 ); p *= 17.0; return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) ); }
+float ubNoise( vec3 x ) {
+  vec3 i = floor( x ); vec3 f = fract( x ); f = f * f * ( 3.0 - 2.0 * f );
+  return mix( mix( mix( ubHash( i ), ubHash( i + vec3( 1, 0, 0 ) ), f.x ), mix( ubHash( i + vec3( 0, 1, 0 ) ), ubHash( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
+              mix( mix( ubHash( i + vec3( 0, 0, 1 ) ), ubHash( i + vec3( 1, 0, 1 ) ), f.x ), mix( ubHash( i + vec3( 0, 1, 1 ) ), ubHash( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z );
+}`;
+
+const UBER_FRAG_MAP = /* glsl */`
+float ubEdge = 0.0;
+if ( uDissolve > 0.001 ) {
+  float dv = ubNoise( vModelPos * 15.0 ) * 0.5 + ubNoise( vModelPos * 4.5 ) * 0.5;
+  dv = dv * 0.82 + ( 1.0 - clamp( vModelPos.y * 0.5, 0.0, 1.0 ) ) * 0.18;
+  float cut = uDissolve * 1.12;
+  if ( dv < cut ) discard;
+  ubEdge = 1.0 - smoothstep( cut, cut + 0.07, dv );
+}
 #ifdef USE_MAP
   vec4 texelColor = texture2D( map, vMapUv );
-  diffuseColor.rgb *= mix( vec3(1.0), texelColor.rgb, vPbr.w );
+  diffuseColor.rgb *= mix( vec3( 1.0 ), texelColor.rgb, vPbr.w );
   diffuseColor.a *= mix( 1.0, texelColor.a, vPbr.w );
-#endif`)
+#endif`;
+
+const UBER_FRAG_EMIS = /* glsl */`#include <emissivemap_fragment>
+totalEmissiveRadiance += diffuseColor.rgb * vPbr.z * ( 0.85 + 0.15 * sin( uTime * 4.0 + vModelPos.y * 3.0 ) ) * uPulse;
+totalEmissiveRadiance += uDissolveColor * ubEdge * 7.0;`;
+
+const UBER_FRAG_RIM = /* glsl */`{
+  float rimF = 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) );
+  float rimLit = 0.2 + 0.8 * saturate( dot( normal, uMoonView ) * 0.8 + 0.2 );
+  outgoingLight += uRimColor * uRimStrength * pow( rimF, 3.0 ) * rimLit + uRimExtra * pow( rimF, 2.0 );
+}
+#include <opaque_fragment>`;
+
+function patchUber(material, perMat) {
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, UBER_SHARED, perMat);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', UBER_VERT_HEAD)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPbr = pbr;\nvModelPos = position;')
+      .replace('#include <skinning_vertex>', UBER_VERT_FLEX);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', UBER_FRAG_HEAD)
+      .replace('#include <map_fragment>', UBER_FRAG_MAP)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vPbr.x;')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vPbr.y;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vPbr.z;');
+      .replace('#include <emissivemap_fragment>', UBER_FRAG_EMIS)
+      .replace('#include <opaque_fragment>', UBER_FRAG_RIM);
   };
-  material.customProgramCacheKey = () => 'uber-v1' + (material.map ? material.map.uuid : '');
+  material.customProgramCacheKey = () => 'uber-v2' + (material.map ? material.map.uuid : '');
+  material.userData.uber = perMat;
   return material;
 }
 
@@ -46,10 +120,10 @@ export function baseMaterials() {
   if (_base) return _base;
   const body = patchUber(new THREE.MeshStandardMaterial({
     vertexColors: true, map: getDamask(), side: THREE.DoubleSide, roughness: 0.8, metalness: 0,
-  }));
+  }), makeUberUniforms());
   const decal = patchUber(new THREE.MeshStandardMaterial({
     vertexColors: true, map: getAtlas(), side: THREE.DoubleSide, alphaTest: 0.35, roughness: 0.7,
-  }));
+  }), makeUberUniforms());
   _base = { body, decal };
   return _base;
 }
@@ -101,33 +175,38 @@ export class RigBuilder {
     const uv = g.getAttribute('uv');
     if (opt.decal) {
       const [rx, ry, rw, rh] = opt.decal;
-      const S = ATLAS_SIZE;
       const inset = 1.5;
       for (let i = 0; i < n; i++) {
         let u = uv.getX(i), v = uv.getY(i);
         if (opt.uvFlipU) u = 1 - u;
         u = Math.min(1, Math.max(0, u)); v = Math.min(1, Math.max(0, v));
-        uv.setXY(i, (rx + inset + u * (rw - inset * 2)) / S, 1 - (ry + inset + (1 - v) * (rh - inset * 2)) / S);
+        uv.setXY(i, (rx + inset + u * (rw - inset * 2)) / ATLAS_W, 1 - (ry + inset + (1 - v) * (rh - inset * 2)) / ATLAS_H);
       }
     } else if (opt.uvScale) {
       for (let i = 0; i < n; i++) uv.setXY(i, uv.getX(i) * opt.uvScale[0], uv.getY(i) * opt.uvScale[1]);
     }
 
-    // 颜色 & PBR
+    // 颜色 & PBR & 柔性
     const col = new Float32Array(n * 3);
     const pbr = new Float32Array(n * 4);
+    const flex = new Float32Array(n);
     _c.set(opt.color ?? 0xffffff);
     const colorFn = opt.colorFn;
+    const flexFn = typeof opt.flex === 'function' ? opt.flex : null;
+    const flexK = typeof opt.flex === 'number' ? opt.flex : 0;
     for (let i = 0; i < n; i++) {
-      if (colorFn) { _v.fromBufferAttribute(pos, i); colorFn(_v, _c); }
+      if (colorFn || flexFn) _v.fromBufferAttribute(pos, i);
+      if (colorFn) colorFn(_v, _c);
       col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
       pbr[i * 4] = opt.rough ?? 0.8;
       pbr[i * 4 + 1] = opt.metal ?? 0;
       pbr[i * 4 + 2] = opt.emis ?? 0;
       pbr[i * 4 + 3] = opt.pat ?? (opt.decal ? 1 : 0);
+      flex[i] = flexFn ? Math.max(0, flexFn(_v)) : flexK;
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setAttribute('pbr', new THREE.BufferAttribute(pbr, 4));
+    g.setAttribute('flex', new THREE.BufferAttribute(flex, 1));
 
     // 蒙皮
     const si = new Uint16Array(n * 4);
@@ -210,13 +289,15 @@ export function instantiate(template, { ownMaterials = true, shadows = true } = 
   const base = baseMaterials();
   const meshes = [];
   const materials = [];
+  // 同一实例的两个材质共享一组 uniform，便于整体控制溶解 / 鼓风 / 轮廓光
+  const uber = ownMaterials ? makeUberUniforms() : base.body.userData.uber;
   for (const k of ['body', 'decal']) {
     const geo = template.geos[k];
     if (!geo) continue;
-    const mat = ownMaterials ? base[k].clone() : base[k];
+    let mat = base[k];
     if (ownMaterials) {
-      mat.onBeforeCompile = base[k].onBeforeCompile;
-      mat.customProgramCacheKey = base[k].customProgramCacheKey;
+      mat = base[k].clone();
+      patchUber(mat, uber);
     }
     const mesh = new THREE.SkinnedMesh(geo, mat);
     mesh.bind(skeleton, new THREE.Matrix4());
@@ -229,7 +310,7 @@ export function instantiate(template, { ownMaterials = true, shadows = true } = 
   }
   const map = {};
   bones.forEach((b) => { map[b.name] = b; });
-  return { root, bones: map, skeleton, meshes, materials, template };
+  return { root, bones: map, skeleton, meshes, materials, template, uber };
 }
 
 // 用于命中/武器挂点：取骨骼世界坐标

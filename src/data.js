@@ -50,7 +50,7 @@ export const ENEMIES = {
     scale: 1.3, hp: 2600, speed: 2.6, damage: 26, radius: 0.6, xp: 60, ai: 'hop', boss: true,
     hop: { h: 0.55, t: 0.62, rest: 0.25 }, atkRange: 2.2, atkTime: 1.0,
     bulletMult: 0.85, fireMult: 0.4, tags: ['jiangshi'], aura: { radius: 4.2, dps: 6 },
-    fireRing: { cd: 6, count: 10, dmg: 14 },
+    fireRing: { cd: 6, count: 10, dmg: 14 }, posture: 1000, phases: [0.55, 0.25],
     lore: '上古旱神之说，后世以为极高阶尸变。旱魃一出，赤地千里，河井俱涸。其身灼热如炉，近之则皮肉焦枯——切记远战。',
   },
   imp: {
@@ -77,27 +77,40 @@ export const ENEMIES = {
     id: 'wuWhite', model: 'wuWhite', kind: 'wuWhite', name: '白无常', title: '一见生财', category: '首领',
     scale: 1, hp: 2400, speed: 3.2, damage: 20, radius: 0.55, xp: 50, ai: 'wuWhite', boss: true,
     atkRange: 12, atkTime: 1.2, bulletMult: 1, fireMult: 1, tags: ['ghost'],
-    chain: { speed: 16, dmg: 18, cd: 3.4 }, summon: { cd: 9, type: 'imp', count: 4 },
+    chain: { speed: 16, dmg: 18, cd: 3.4 }, summon: { cd: 9, type: 'imp', count: 4 }, posture: 900, phases: [0.5],
     lore: '谢必安，勾魂使者之一。白衣高帽，笑面长舌，帽书"一见生财"。其勾魂索掷出如电，被锁者魂魄离体。',
   },
   wuBlack: {
     id: 'wuBlack', model: 'wuBlack', kind: 'wuBlack', name: '黑无常', title: '天下太平', category: '首领',
     scale: 1, hp: 2800, speed: 3.0, damage: 28, radius: 0.55, xp: 50, ai: 'wuBlack', boss: true,
     atkRange: 2.4, atkTime: 1.0, bulletMult: 1, fireMult: 1, tags: ['ghost'],
-    dash: { speed: 17, dmg: 26, cd: 5, windup: 0.8 }, slam: { radius: 4.5, dmg: 22 },
+    dash: { speed: 17, dmg: 26, cd: 5, windup: 0.8 }, slam: { radius: 4.5, dmg: 22 }, posture: 1000, phases: [0.5],
     lore: '范无救，勾魂使者之二。黑衣黑面，帽书"天下太平"。手持锁链令牌，性烈如火，冲锋一击，山石俱碎。',
+  },
+  soldier: {
+    id: 'soldier', model: 'soldier', kind: 'soldier', name: '阴兵', title: '阴兵借道', category: '鬼怪',
+    scale: 1, hp: 150, speed: 2.5, damage: 18, radius: 0.5, xp: 5, ai: 'soldier',
+    atkRange: 2.7, atkTime: 1.15, bulletMult: 1, fireMult: 1.1, tags: ['ghost', 'soldier'], shield: { arc: 1.25, mult: 0.15 },
+    lore: '阴司鬼卒，生前多是战死沙场的兵勇，死后披甲执锐、列阵而行，民间谓之"阴兵借道"。虎头盾挡得住正面枪弹——绕其侧背，或以道法破之。',
+  },
+  sorcerer: {
+    id: 'sorcerer', model: 'sorcerer', kind: 'sorcerer', name: '玄阴子', title: '逆天邪道', category: '首领',
+    scale: 1, hp: 11000, speed: 3.4, damage: 30, radius: 0.55, xp: 300, ai: 'sorcerer', boss: true,
+    atkRange: 2.9, atkTime: 1.0, bulletMult: 1, fireMult: 0.9, tags: [], posture: 1800, phases: [0.55, 0.2],
+    lore: '玄清子的师弟，茅山百年不遇的奇才。痴迷长生，私习养尸禁术、以活人炼尸，被逐出山门。三十年来遍历湘西，暗中豢养尸王，只等中元子时鬼门大开——借阴兵、夺阳寿、逆天改命。',
   },
   hou: {
     id: 'hou', model: 'hou', kind: 'hou', name: '犼', title: '僵尸之王', category: '首领',
     scale: 1.5, hp: 7000, speed: 3.4, damage: 36, radius: 0.85, xp: 200, ai: 'hou', boss: true,
     atkRange: 3.0, atkTime: 1.1, bulletMult: 0.8, fireMult: 1.0, tags: ['jiangshi'],
     charge: { windup: 1.0, speed: 15, duration: 0.95, damage: 34, cd: 7 },
-    slam: { radius: 6, dmg: 30, cd: 9 }, summon: { cd: 14, type: 'flying', count: 3 },
+    slam: { radius: 6, dmg: 30, cd: 9 }, summon: { cd: 14, type: 'flying', count: 3 }, posture: 2200, phases: [0.6, 0.3],
+    breath: { dur: 1.6, range: 9.5, angle: 0.5, dps: 42 }, leap: { radius: 6.5, dmg: 34 },
     lore: '《续子不语》云："犼乃僵尸所变。"僵尸修炼千年，褪尽腐肉，化而为犼——口喷烟火，力撼山岳，连龙王亦惧其三分。',
   },
 };
 
-export const CODEX_ORDER = ['normal', 'purple', 'white', 'green', 'hairy', 'flying', 'imp', 'paper', 'ghost', 'drought', 'wuWhite', 'wuBlack', 'hou'];
+export const CODEX_ORDER = ['normal', 'purple', 'white', 'green', 'hairy', 'flying', 'imp', 'paper', 'ghost', 'soldier', 'drought', 'wuWhite', 'wuBlack', 'hou', 'sorcerer'];
 
 // 章节：若干限时波次 + 首领
 export const CHAPTERS = [
@@ -113,7 +126,9 @@ export const CHAPTERS = [
     boss: ['drought'], bossName: '旱魃 · 赤地千里', bossEscort: { purple: 4 },
     ambience: {
       skyTop: 0x04060c, skyHorizon: 0x1a2436, moonColor: 0xf4ecd8, moonLight: 0xbfd0ff, moonIntensity: 1.35, moonSize: 0.045,
-      fog: 0x0e1420, fogDensity: 0.016, hemiSky: 0x8aa0c8, hemiGround: 0x2a2418, hemi: 0.75, cloud: 0x283040, sets: [],
+      fog: 0x0e1420, fogDensity: 0.016, hemiSky: 0x8aa0c8, hemiGround: 0x2a2418, hemi: 0.45, cloud: 0x283040, sets: [],
+      envIntensity: 0.7, wet: 0.2, rim: 0x5a7ac0, rimK: 0.5, audio: 'yizhuang',
+      grade: { saturation: 0.95, contrast: 1.08, shadow: 0x1a4a7a, high: 0x9a6a30, bloom: 0.55, rays: 1.0, raysColor: 0xc8d8ff },
     },
   },
   {
@@ -128,8 +143,10 @@ export const CHAPTERS = [
     boss: ['wuWhite', 'wuBlack'], bossName: '黑白无常 · 勾魂使者', bossEscort: { paper: 5 },
     ambience: {
       skyTop: 0x040a08, skyHorizon: 0x14261c, moonColor: 0xd8f0d0, moonLight: 0xa8e0b8, moonIntensity: 1.1, moonSize: 0.04,
-      fog: 0x0c1a14, fogDensity: 0.024, hemiSky: 0x88b098, hemiGround: 0x1a2418, hemi: 0.7, cloud: 0x1e3028, sets: ['bamboo'],
+      fog: 0x0c1a14, fogDensity: 0.022, hemiSky: 0x88b098, hemiGround: 0x1a2418, hemi: 0.42, cloud: 0x1e3028, sets: ['bamboo'],
       ghostFire: 0x9fffc8, mist: 0xc8ffe0, mountain: 0x08120c,
+      envIntensity: 0.65, wet: 0.75, rim: 0x5ab090, rimK: 0.5, rain: true, audio: 'village', grass: 0xb8d0a0,
+      grade: { saturation: 0.82, contrast: 1.1, shadow: 0x18584a, high: 0x8a9a60, bloom: 0.5, rays: 0.7, raysColor: 0xc8ffe0 },
     },
   },
   {
@@ -138,20 +155,68 @@ export const CHAPTERS = [
     waves: [
       { dur: 45, rate: 2.2, max: 44, pool: { green: 4, hairy: 2, imp: 8, ghost: 2 } },
       { dur: 50, rate: 2.5, max: 50, pool: { hairy: 3, flying: 3, imp: 8, paper: 3 } },
-      { dur: 50, rate: 2.8, max: 54, pool: { hairy: 4, flying: 4, ghost: 3, imp: 8 } },
-      { dur: 55, rate: 3.1, max: 58, pool: { hairy: 4, flying: 5, green: 3, ghost: 3, imp: 9 } },
+      { dur: 50, rate: 2.8, max: 54, pool: { hairy: 4, flying: 4, ghost: 3, soldier: 2, imp: 8 } },
+      { dur: 55, rate: 3.1, max: 58, pool: { hairy: 4, flying: 5, green: 3, ghost: 3, soldier: 3, imp: 9 } },
     ],
     boss: ['hou'], bossName: '犼 · 僵尸之王', bossEscort: { hairy: 2, flying: 2 },
     ambience: {
       skyTop: 0x0a0204, skyHorizon: 0x3a0c08, moonColor: 0xff5a3a, moonLight: 0xff7a5c, moonIntensity: 1.2, moonSize: 0.075,
-      fog: 0x1c0806, fogDensity: 0.02, hemiSky: 0xc08070, hemiGround: 0x2a0e08, hemi: 0.7, cloud: 0x3a1410, sets: ['embers', 'cracks'],
+      fog: 0x1c0806, fogDensity: 0.019, hemiSky: 0xc08070, hemiGround: 0x2a0e08, hemi: 0.42, cloud: 0x3a1410, sets: ['embers', 'cracks', 'gate'],
       ghostFire: 0xff8a50, mist: 0xffb0a0, mountain: 0x140404,
+      envIntensity: 0.75, wet: 0.1, rim: 0xff5a3a, rimK: 0.6, warmLights: 2.2, envGround: 0x501008, audio: 'underworld', grass: 0x8a4a3a,
+      grade: { saturation: 1.08, contrast: 1.12, shadow: 0x4a1020, high: 0xffa060, bloom: 0.65, rays: 1.5, raysColor: 0xff7050 },
     },
   },
 ];
 
+CHAPTERS.push({
+  id: 4, name: '鬼门 · 逆天', en: 'CHAPTER IV', stars: 5,
+  story: '犼王伏诛，鬼门却未闭合。\n门后阴兵列阵，锁魂链的那一头，吊着师父的魂魄。\n玄阴子立在门前，等你很久了。',
+  waves: [
+    { dur: 40, rate: 2.4, max: 46, pool: { soldier: 5, hairy: 3, flying: 3, ghost: 3, imp: 6 } },
+    { dur: 45, rate: 2.8, max: 52, pool: { soldier: 6, hairy: 4, flying: 4, ghost: 3, paper: 3, imp: 6 } },
+  ],
+  boss: ['sorcerer'], bossName: '玄阴子 · 逆天邪道', bossEscort: { soldier: 4 }, bossAt: [0, -12],
+  ambience: {
+    skyTop: 0x08030e, skyHorizon: 0x2a0a30, moonColor: 0xff5a8a, moonLight: 0xc08aff, moonIntensity: 1.05, moonSize: 0.07,
+    fog: 0x150818, fogDensity: 0.02, hemiSky: 0xa080c0, hemiGround: 0x200a20, hemi: 0.4, cloud: 0x2a0c34, sets: ['embers', 'cracks', 'gate'],
+    ghostFire: 0xc080ff, mist: 0xd0a0ff, mountain: 0x0c040e,
+    envIntensity: 0.7, wet: 0.15, rim: 0xb070ff, rimK: 0.62, warmLights: 1.4, envGround: 0x300a30, audio: 'gate', eclipse: 1, grass: 0x6a4a6a,
+    grade: { saturation: 1.05, contrast: 1.14, shadow: 0x2a1048, high: 0xff7050, bloom: 0.7, rays: 1.6, raysColor: 0xc070ff },
+  },
+});
+
+// 终章黎明（结局）
+export const DAWN_AMBIENCE = {
+  skyTop: 0x2a4a7a, skyHorizon: 0xd8906a, moonColor: 0xfff0d0, moonLight: 0xffd8b0, moonIntensity: 1.6, moonSize: 0.03,
+  fog: 0x8a7a80, fogDensity: 0.012, hemiSky: 0xc8d8ff, hemiGround: 0x5a4a3a, hemi: 0.8, cloud: 0xd8a080, sets: [],
+  ghostFire: 0xffe0a0, mist: 0xfff0e0, mountain: 0x3a3048,
+  envIntensity: 1.0, wet: 0.35, rim: 0xffc890, rimK: 0.45, audio: 'dawn',
+  grade: { saturation: 1.05, contrast: 1.04, shadow: 0x3a4a70, high: 0xffc080, bloom: 0.6, rays: 1.2, raysColor: 0xffd8a0 },
+};
+
+// 难度：入道 / 修行 / 伏魔 / 天劫
+export const DIFFICULTY = {
+  easy: { id: 'easy', name: '入道', tag: '剧情', desc: '邪祟孱弱，适合初涉此道、专注故事的道友。', hp: 0.7, dmg: 0.55, spawn: 0.8, elite: 0.6, affixes: 1, aggro: 0.85, tele: 1.3, reward: 0.6, heal: 1.5, bossHp: 0.7 },
+  normal: { id: 'normal', name: '修行', tag: '标准', desc: '设计者心中的本来面目：步步惊心，却有路可走。', hp: 1, dmg: 1, spawn: 1, elite: 1, affixes: 1, aggro: 1, tele: 1, reward: 1, heal: 1, bossHp: 1 },
+  hard: { id: 'hard', name: '伏魔', tag: '困难', desc: '尸潮更密、出手更狠、预兆更短。精英怪身怀双重词缀。', hp: 1.3, dmg: 1.35, spawn: 1.15, elite: 1.6, affixes: 2, aggro: 1.15, tele: 0.85, reward: 1.5, heal: 0.8, bossHp: 1.3 },
+  hell: { id: 'hell', name: '天劫', tag: '噩梦', desc: '天降大劫，九死一生。回春葫芦不再掉落。通关伏魔难度后开启。', hp: 1.65, dmg: 1.75, spawn: 1.3, elite: 2.3, affixes: 2, aggro: 1.3, tele: 0.72, reward: 2.3, heal: 0, bossHp: 1.65, unlock: 'hard' },
+};
+
+// 精英词缀
+export const AFFIXES = {
+  swift: { name: '迅捷', color: 0x60c8ff, desc: '移速与攻速大增' },
+  armored: { name: '铁甲', color: 0xd8c080, desc: '枪械伤害减半' },
+  volatile: { name: '爆裂', color: 0xff7040, desc: '死后尸爆' },
+  splitter: { name: '分身', color: 0xc0a0ff, desc: '死后分裂' },
+  vampiric: { name: '吸魂', color: 0xff4070, desc: '持续回复生命' },
+  warded: { name: '符护', color: 0xffd060, desc: '符咒护体，火与道法可破' },
+  frenzy: { name: '狂暴', color: 0xff3020, desc: '残血狂暴' },
+  summoner: { name: '招魂', color: 0x90ffa0, desc: '召唤小鬼' },
+};
+
 // 无尽轮回（通关后）：循环第三章怪池并持续加压
-export const ENDLESS_WAVE = { dur: 50, rate: 3.2, max: 64, pool: { hairy: 4, flying: 4, green: 3, ghost: 3, imp: 9, paper: 3, white: 2 } };
+export const ENDLESS_WAVE = { dur: 50, rate: 3.2, max: 64, pool: { hairy: 4, flying: 4, green: 3, ghost: 3, imp: 9, paper: 3, white: 2, soldier: 3 } };
 
 // 局外修行（阳气永久强化）
 export const UPGRADES = {
@@ -161,6 +226,8 @@ export const UPGRADES = {
   fu: { name: '敕令真火', desc: '火符伤害 +25 · 冷却 -0.6s', max: 5, base: 150, growth: 1.6, icon: '🔥' },
   xp: { name: '悟性通达', desc: '阳气珠经验 +8%', max: 5, base: 140, growth: 1.6, icon: '📿' },
   luck: { name: '福缘深厚', desc: '每局重掷 +1、稀有道法几率提升', max: 3, base: 300, growth: 2.0, icon: '🍀' },
+  breath: { name: '龟息功', desc: '闭气时长 +0.8 秒', max: 3, base: 180, growth: 1.7, icon: '🐢' },
+  dash: { name: '踏罡步斗', desc: '罡步冷却 -0.2 秒', max: 3, base: 200, growth: 1.7, icon: '💨' },
 };
 
 export function upgradeCost(key, level) {

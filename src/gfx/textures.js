@@ -5,11 +5,20 @@ import * as THREE from 'three';
 //  全部用 Canvas 实时绘制，无外部图片资源。
 // =====================================================================
 
-export const ATLAS_SIZE = 1024;
+export const ATLAS_W = 2048;
+export const ATLAS_H = 1024;
+export const ATLAS_SIZE = ATLAS_W;
 
-// 图集分区（像素，左上角原点）
+// 图集分区（像素，左上角原点）；右半幅为 v1.2 新增角色与纹样
 export const REGION = {
-  face: (i) => [(i % 4) * 256, Math.floor(i / 4) * 256, 256, 256],
+  face: (i) => (i < 8 ? [(i % 4) * 256, Math.floor(i / 4) * 256, 256, 256] : [1024 + ((i - 8) % 4) * 256, Math.floor((i - 8) / 4) * 256, 256, 256]),
+  talismanBlack: [1024, 512, 128, 256],
+  armor: [1152, 512, 512, 256],
+  tiger: [1664, 512, 256, 256],
+  sevenStar: [1920, 512, 128, 256],
+  robeTrim: [1024, 768, 512, 64],
+  cracks: [1536, 768, 256, 256],
+  taiji: [1792, 768, 256, 256],
   talisman: [0, 512, 128, 256],
   crane: [128, 512, 256, 256],
   bagua: [384, 512, 256, 256],
@@ -26,6 +35,7 @@ export const REGION = {
 
 export const FACE = {
   jiangshi: 0, priest: 1, imp: 2, ghost: 3, wuWhite: 4, wuBlack: 5, hou: 6, paper: 7,
+  master: 8, sorcerer: 9, beast: 10, soldier: 11,
 };
 
 function rand(seed) {
@@ -227,6 +237,78 @@ function drawFace(g, kind) {
         const x = cx + i * 9, big = Math.abs(i) === 3;
         g.beginPath(); g.moveTo(x - 4, eyeY + 46); g.lineTo(x, eyeY + (big ? 72 : 58)); g.lineTo(x + 4, eyeY + 46); g.fill();
       }
+      break;
+    }
+    case FACE.master: {
+      // 玄清子：慈眉善目，白长眉下垂，额纹深刻，眉心朱砂
+      socket('rgba(110,80,60,0.35)', 22);
+      eyes('#f2ede0', '#2a1c12', '#080604', 10, 5);
+      g.strokeStyle = 'rgba(30,20,10,0.6)'; g.lineWidth = 2.5;
+      for (const s of [-1, 1]) { g.beginPath(); g.arc(cx + s * eyeDX, eyeY - 2, 12, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); }
+      g.strokeStyle = 'rgba(120,80,60,0.5)'; g.lineWidth = 1.8;
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(cx - 40, eyeY - 44 - i * 9); g.quadraticCurveTo(cx, eyeY - 50 - i * 9, cx + 40, eyeY - 44 - i * 9); g.stroke(); }
+      for (const s of [-1, 1]) { g.beginPath(); g.moveTo(cx + s * (eyeDX + 14), eyeY + 2); g.lineTo(cx + s * (eyeDX + 24), eyeY + 8); g.stroke(); g.beginPath(); g.moveTo(cx + s * (eyeDX + 13), eyeY + 8); g.lineTo(cx + s * (eyeDX + 22), eyeY + 16); g.stroke(); }
+      // 白长眉
+      g.strokeStyle = '#f2f0ea'; g.lineCap = 'round'; g.lineWidth = 7;
+      for (const s of [-1, 1]) { g.beginPath(); g.moveTo(cx + s * 10, eyeY - 18); g.quadraticCurveTo(cx + s * 38, eyeY - 26, cx + s * 62, eyeY - 4); g.stroke(); }
+      nostrils('rgba(110,60,40,0.55)');
+      // 白须
+      g.fillStyle = '#ecebe6';
+      g.beginPath(); g.moveTo(cx - 34, eyeY + 44); g.quadraticCurveTo(cx, eyeY + 36, cx + 34, eyeY + 44); g.quadraticCurveTo(cx + 26, eyeY + 120, cx, eyeY + 132); g.quadraticCurveTo(cx - 26, eyeY + 120, cx - 34, eyeY + 44); g.fill();
+      g.strokeStyle = 'rgba(160,150,140,0.6)'; g.lineWidth = 1;
+      for (let i = 0; i < 26; i++) { const x = cx + (R() - 0.5) * 50; g.beginPath(); g.moveTo(x, eyeY + 46); g.lineTo(x + (R() - 0.5) * 10, eyeY + 120); g.stroke(); }
+      for (const s of [-1, 1]) { g.fillStyle = '#ecebe6'; g.beginPath(); g.ellipse(cx + s * 18, eyeY + 38, 18, 5, s * 0.35, 0, Math.PI * 2); g.fill(); }
+      ellipse(g, cx, eyeY - 34, 4, 5); g.fillStyle = '#c0161a'; g.fill();
+      break;
+    }
+    case FACE.sorcerer: {
+      // 玄阴子：苍白、眼窝乌青、紫瞳、薄唇冷笑、倒书黑符额印
+      g.fillStyle = 'rgba(200,205,220,0.25)'; g.fillRect(0, 0, W, W);
+      socket('rgba(40,10,60,0.95)', 30);
+      cheekHollow(0.5);
+      eyes('#e8e0f0', '#9a40ff', '#14001e', 11, 5, true);
+      for (const s of [-1, 1]) radial(g, cx + s * eyeDX, eyeY, 14, 'rgba(180,80,255,0.55)', 'rgba(180,80,255,0)');
+      g.strokeStyle = '#e8e6e0'; g.lineWidth = 5; g.lineCap = 'round';
+      for (const s of [-1, 1]) { g.beginPath(); g.moveTo(cx + s * 8, eyeY - 12); g.lineTo(cx + s * 50, eyeY - 30); g.stroke(); }
+      nostrils('rgba(60,40,70,0.6)');
+      g.strokeStyle = '#3a0a28'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(cx - 22, eyeY + 54); g.quadraticCurveTo(cx + 4, eyeY + 50, cx + 24, eyeY + 46); g.stroke();
+      // 细长八字须
+      g.strokeStyle = '#ecebe6'; g.lineWidth = 3;
+      for (const s of [-1, 1]) { g.beginPath(); g.moveTo(cx + s * 6, eyeY + 42); g.quadraticCurveTo(cx + s * 30, eyeY + 48, cx + s * 40, eyeY + 82); g.stroke(); }
+      // 额前倒书黑符
+      g.fillStyle = '#100410'; g.font = 'bold 34px "KaiTi","STKaiti","SimSun",serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.save(); g.translate(cx, eyeY - 52); g.rotate(Math.PI); g.fillText('敕', 0, 0); g.restore();
+      veins('rgba(90,40,120,0.35)', 10);
+      break;
+    }
+    case FACE.beast: {
+      g.fillStyle = 'rgba(40,60,40,0.3)'; g.fillRect(0, 0, W, W);
+      socket('rgba(0,0,0,0.95)', 34);
+      eyes('#ff2a10', '#ffe040', '#200', 13, 7, false);
+      g.strokeStyle = 'rgba(255,90,30,0.95)'; g.lineWidth = 3;
+      for (let i = 0; i < 9; i++) {
+        let x = cx + (R() - 0.5) * 200, y = eyeY - 80 + R() * 180;
+        g.beginPath(); g.moveTo(x, y);
+        for (let k = 0; k < 5; k++) { x += (R() - 0.5) * 30; y += (R() - 0.2) * 24; g.lineTo(x, y); }
+        g.stroke();
+      }
+      nostrils('#000');
+      g.fillStyle = '#140000';
+      g.beginPath(); g.moveTo(cx - 46, eyeY + 38); g.quadraticCurveTo(cx, eyeY + 96, cx + 46, eyeY + 38); g.quadraticCurveTo(cx, eyeY + 54, cx - 46, eyeY + 38); g.fill();
+      g.fillStyle = '#e8e0c0';
+      for (let i = -4; i <= 4; i++) { const x = cx + i * 10, big = Math.abs(i) === 2; g.beginPath(); g.moveTo(x - 4, eyeY + 44); g.lineTo(x, eyeY + (big ? 78 : 60)); g.lineTo(x + 4, eyeY + 44); g.fill(); }
+      break;
+    }
+    case FACE.soldier: {
+      g.fillStyle = 'rgba(80,100,120,0.3)'; g.fillRect(0, 0, W, W);
+      socket('rgba(0,0,10,1)', 30);
+      for (const s of [-1, 1]) { radial(g, cx + s * eyeDX, eyeY, 9, 'rgba(120,240,255,1)', 'rgba(60,200,255,0)'); }
+      nostrils('rgba(0,0,0,.6)');
+      g.strokeStyle = 'rgba(10,10,20,0.9)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(cx - 22, eyeY + 52); g.lineTo(cx + 22, eyeY + 52); g.stroke();
+      for (let i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(cx + i * 7, eyeY + 46); g.lineTo(cx + i * 7, eyeY + 58); g.stroke(); }
+      veins('rgba(20,40,60,0.4)', 12);
       break;
     }
     case FACE.paper: {
@@ -443,16 +525,109 @@ function drawPlaque(g, w, h) {
   g.fillText('令', w / 2, h / 2 + 4);
 }
 
+// 黑符（倒书敕令，邪道所用）
+function drawBlackTalisman(g, w, h) {
+  g.fillStyle = '#16101a'; g.fillRect(0, 0, w, h);
+  const R = rand(13);
+  for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(90,40,120,${R() * 0.2})`; g.fillRect(R() * w, R() * h, 2 + R() * 5, 1 + R() * 3); }
+  g.strokeStyle = '#9a3ad0'; g.lineWidth = w * 0.035;
+  g.strokeRect(w * 0.08, h * 0.03, w * 0.84, h * 0.94);
+  g.fillStyle = '#c050ff';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `bold ${Math.round(w * 0.42)}px "KaiTi","STKaiti","SimSun",serif`;
+  for (const [ch, y] of [['敕', 0.86], ['令', 0.7]]) { g.save(); g.translate(w / 2, h * y); g.rotate(Math.PI); g.fillText(ch, 0, 0); g.restore(); }
+  g.strokeStyle = '#c050ff'; g.lineWidth = w * 0.05; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(w / 2, h * 0.08); g.bezierCurveTo(w * 0.85, h * 0.2, w * 0.15, h * 0.32, w * 0.7, h * 0.44); g.bezierCurveTo(w * 0.2, h * 0.5, w * 0.8, h * 0.56, w * 0.45, h * 0.6); g.stroke();
+}
+
+// 鱼鳞札甲
+function drawArmor(g, w, h) {
+  g.fillStyle = '#1a1c20'; g.fillRect(0, 0, w, h);
+  const cols = 32, rows = 10, cw = w / cols, rh = h / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = -1; c <= cols; c++) {
+      const x = c * cw + (r % 2) * cw / 2, y = r * rh;
+      const gr = g.createLinearGradient(x, y, x, y + rh * 1.3);
+      gr.addColorStop(0, '#8a8e98'); gr.addColorStop(0.6, '#4a4e58'); gr.addColorStop(1, '#202228');
+      g.fillStyle = gr;
+      g.beginPath(); g.moveTo(x + 1, y); g.lineTo(x + cw - 1, y); g.lineTo(x + cw - 1, y + rh * 0.9); g.quadraticCurveTo(x + cw / 2, y + rh * 1.35, x + 1, y + rh * 0.9); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1; g.stroke();
+      g.fillStyle = 'rgba(200,170,90,.8)'; g.fillRect(x + cw / 2 - 1, y + 3, 2, 2);
+    }
+  }
+  g.fillStyle = 'rgba(120,20,20,.9)'; g.fillRect(0, 0, w, h * 0.06); g.fillRect(0, h * 0.94, w, h * 0.06);
+}
+
+// 虎头盾
+function drawTiger(g, w, h) {
+  const cx = w / 2, cy = h / 2;
+  g.fillStyle = '#5a1a12'; g.beginPath(); g.arc(cx, cy, w * 0.49, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#c8a040'; g.lineWidth = 10; g.beginPath(); g.arc(cx, cy, w * 0.46, 0, Math.PI * 2); g.stroke();
+  for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; g.fillStyle = '#d8b050'; g.beginPath(); g.arc(cx + Math.cos(a) * w * 0.42, cy + Math.sin(a) * w * 0.42, 5, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = '#d89a2a'; g.beginPath(); g.ellipse(cx, cy + 4, w * 0.3, h * 0.27, 0, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#111';
+  for (const s of [-1, 1]) {
+    g.beginPath(); g.moveTo(cx + s * 18, cy - 20); g.lineTo(cx + s * 52, cy - 32); g.lineTo(cx + s * 46, cy - 10); g.closePath(); g.fill();
+    g.fillStyle = '#ffe060'; g.beginPath(); g.ellipse(cx + s * 32, cy - 18, 10, 6, s * 0.3, 0, Math.PI * 2); g.fill(); g.fillStyle = '#111';
+    g.beginPath(); g.arc(cx + s * 32, cy - 18, 3, 0, Math.PI * 2); g.fill();
+    for (let k = 0; k < 3; k++) { g.fillRect(cx + s * (40 + k * 10) - 3, cy + 4 + k * 6, 6, 18); }
+  }
+  g.fillStyle = '#111'; g.font = 'bold 40px "KaiTi","SimSun",serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('王', cx, cy - 52);
+  g.fillStyle = '#300'; g.beginPath(); g.moveTo(cx - 34, cy + 22); g.quadraticCurveTo(cx, cy + 66, cx + 34, cy + 22); g.quadraticCurveTo(cx, cy + 36, cx - 34, cy + 22); g.fill();
+  g.fillStyle = '#f0e8d0';
+  for (const s of [-1, 1]) { g.beginPath(); g.moveTo(cx + s * 22, cy + 26); g.lineTo(cx + s * 18, cy + 50); g.lineTo(cx + s * 12, cy + 28); g.fill(); }
+}
+
+// 七星剑纹
+function drawSevenStar(g, w, h) {
+  g.fillStyle = '#121214'; g.fillRect(0, 0, w, h);
+  const pts = [[0.5, 0.1], [0.42, 0.22], [0.56, 0.33], [0.46, 0.45], [0.52, 0.6], [0.4, 0.74], [0.5, 0.88]];
+  g.strokeStyle = 'rgba(200,120,255,.7)'; g.lineWidth = 2; g.beginPath();
+  pts.forEach(([x, y], i) => (i ? g.lineTo(x * w, y * h) : g.moveTo(x * w, y * h))); g.stroke();
+  for (const [x, y] of pts) radial(g, x * w, y * h, 10, 'rgba(230,180,255,1)', 'rgba(160,60,255,0)');
+}
+
+// 袍缘回纹（深紫底金线）
+function drawRobeTrim(g, w, h) {
+  g.fillStyle = '#2a0a30'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#c8a040'; g.fillRect(0, 0, w, 4); g.fillRect(0, h - 4, w, 4);
+  g.strokeStyle = '#c8a040'; g.lineWidth = 3;
+  for (let x = 0; x < w; x += 40) {
+    g.beginPath(); g.moveTo(x + 6, h - 12); g.lineTo(x + 6, 12); g.lineTo(x + 30, 12); g.lineTo(x + 30, h - 22); g.lineTo(x + 16, h - 22); g.lineTo(x + 16, 24); g.stroke();
+  }
+}
+
+// 灼热裂纹（尸化后的皮肤）
+function drawCracks(g, w, h) {
+  g.clearRect(0, 0, w, h);
+  const R = rand(29);
+  g.strokeStyle = '#ff5010'; g.lineCap = 'round';
+  for (let i = 0; i < 22; i++) {
+    let x = R() * w, y = R() * h;
+    g.lineWidth = 1 + R() * 3;
+    g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) { x += (R() - 0.5) * 40; y += (R() - 0.5) * 40; g.lineTo(x, y); }
+    g.stroke();
+  }
+}
+
 let _atlas = null;
 export function getAtlas() {
   if (_atlas) return _atlas;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = ATLAS_SIZE;
+  cv.width = ATLAS_W; cv.height = ATLAS_H;
   const g = cv.getContext('2d');
   g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, ATLAS_SIZE, ATLAS_SIZE);
+  g.fillRect(0, 0, ATLAS_W, ATLAS_H);
   const inRegion = (r, fn) => { g.save(); g.translate(r[0], r[1]); g.beginPath(); g.rect(0, 0, r[2], r[3]); g.clip(); fn(g, r[2], r[3]); g.restore(); };
-  for (let i = 0; i < 8; i++) inRegion(REGION.face(i), (gg) => drawFace(gg, i));
+  for (let i = 0; i < 12; i++) inRegion(REGION.face(i), (gg) => drawFace(gg, i));
+  inRegion(REGION.talismanBlack, drawBlackTalisman);
+  inRegion(REGION.armor, drawArmor);
+  inRegion(REGION.tiger, drawTiger);
+  inRegion(REGION.sevenStar, drawSevenStar);
+  inRegion(REGION.robeTrim, drawRobeTrim);
+  inRegion(REGION.cracks, drawCracks);
+  inRegion(REGION.taiji, drawBagua);
   inRegion(REGION.talisman, (gg, w, h) => drawTalisman(gg, w, h));
   inRegion(REGION.crane, drawCrane);
   inRegion(REGION.bagua, drawBagua);
@@ -573,4 +748,93 @@ export function softDotTexture(inner = 'rgba(255,255,255,1)', outer = 'rgba(255,
 
 export function baguaTexture() {
   return canvasTexture(256, 256, (g, w, h) => drawBagua(g, w, h));
+}
+
+// 法阵：透明底上的发光线描（双环刻度 · 八角 · 八卦爻 · 卦名 · 八芒星 · 太极），供加法混合的地面法阵
+function drawSigil(g, w) {
+  g.clearRect(0, 0, w, w);
+  const cx = w / 2, cy = w / 2, R = w * 0.47;
+  g.strokeStyle = '#fff'; g.fillStyle = '#fff';
+  g.shadowColor = 'rgba(255,255,255,0.85)'; g.shadowBlur = w * 0.012;
+  const ring = (r, lw) => { g.lineWidth = lw; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke(); };
+  const poly = (n, r, off, lw) => { g.lineWidth = lw; g.beginPath(); for (let i = 0; i <= n; i++) { const a = off + (i / n) * Math.PI * 2; const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.stroke(); };
+  ring(R, w * 0.008); ring(R * 0.93, w * 0.003);
+  g.lineWidth = w * 0.0025;
+  for (let i = 0; i < 96; i++) {
+    const a = (i / 96) * Math.PI * 2, r1 = R * (i % 4 === 0 ? 0.985 : 0.958);
+    g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.93, cy + Math.sin(a) * R * 0.93); g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.stroke();
+  }
+  poly(8, R * 0.86, Math.PI / 8, w * 0.005);
+  const tri = ['111', '110', '101', '100', '011', '010', '001', '000'];
+  const names = '乾兑离震巽坎艮坤';
+  g.font = `bold ${Math.round(w * 0.045)}px "KaiTi","STKaiti","SimSun",serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = 0; i < 8; i++) {
+    g.save(); g.translate(cx, cy); g.rotate((i / 8) * Math.PI * 2);
+    const bw = R * 0.3, bh = R * 0.026;
+    for (let k = 0; k < 3; k++) {
+      const y = -R * 0.8 + k * R * 0.052;
+      if (tri[i][k] === '1') g.fillRect(-bw / 2, y, bw, bh);
+      else { g.fillRect(-bw / 2, y, bw * 0.42, bh); g.fillRect(bw * 0.08, y, bw * 0.42, bh); }
+    }
+    g.fillText(names[i], 0, -R * 0.6);
+    g.restore();
+  }
+  ring(R * 0.52, w * 0.004); ring(R * 0.47, w * 0.0025);
+  poly(4, R * 0.47, 0, w * 0.003); poly(4, R * 0.47, Math.PI / 4, w * 0.003);
+  const r = R * 0.2;
+  ring(r, w * 0.004);
+  g.lineWidth = w * 0.004;
+  g.beginPath(); g.arc(cx, cy - r / 2, r / 2, -Math.PI / 2, Math.PI / 2, false); g.arc(cx, cy + r / 2, r / 2, -Math.PI / 2, Math.PI / 2, true); g.stroke();
+  g.beginPath(); g.arc(cx, cy - r / 2, r * 0.12, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(cx, cy + r / 2, r * 0.12, 0, Math.PI * 2); g.stroke();
+}
+
+export function sigilTexture() {
+  return canvasTexture(512, 512, (g, w) => drawSigil(g, w));
+}
+
+// 可平铺的分形值噪声（R / G 两套互不相关的噪声），供火焰、烟雾粒子做溶蚀
+let _noiseTex = null;
+export function noiseTexture() {
+  if (_noiseTex) return _noiseTex;
+  const N = 128;
+  const layer = (seed) => {
+    let s = seed;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const out = new Float32Array(N * N);
+    let amp = 1, tot = 0;
+    for (let cells = 4; cells <= 64; cells *= 2) {
+      const lat = new Float32Array(cells * cells);
+      for (let i = 0; i < lat.length; i++) lat[i] = rnd();
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const fx = (x / N) * cells, fy = (y / N) * cells;
+          const x0 = Math.floor(fx), y0 = Math.floor(fy);
+          const tx = fx - x0, ty = fy - y0;
+          const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+          const L = (i, j) => lat[((j % cells) * cells) + (i % cells)];
+          const a = L(x0, y0), b = L(x0 + 1, y0), c = L(x0, y0 + 1), d = L(x0 + 1, y0 + 1);
+          out[y * N + x] += (a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy) * amp;
+        }
+      }
+      tot += amp; amp *= 0.5;
+    }
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < out.length; i++) { out[i] /= tot; lo = Math.min(lo, out[i]); hi = Math.max(hi, out[i]); }
+    for (let i = 0; i < out.length; i++) out[i] = (out[i] - lo) / (hi - lo);
+    return out;
+  };
+  const r = layer(1013), gch = layer(7919);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = N;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(N, N);
+  for (let i = 0; i < N * N; i++) { img.data[i * 4] = r[i] * 255; img.data[i * 4 + 1] = gch[i] * 255; img.data[i * 4 + 2] = 0; img.data[i * 4 + 3] = 255; }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.NoColorSpace;
+  _noiseTex = tex;
+  return tex;
 }

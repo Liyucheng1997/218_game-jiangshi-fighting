@@ -1,12 +1,69 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasTexture, normalFromHeight, talismanTexture, softDotTexture, flameTexture } from './gfx/textures.js';
 import { loft, lathe, roundedBox, tube, V } from './gfx/shapes.js';
+import { HeightFog, MOON_DIR } from './gfx/fog.js';
 
 export const ARENA_HALF = 36;
 
 // ---------------------------------------------------------------- 纹理
 function rnd(seed) { let s = Math.abs(Math.floor(seed)) % 2147483646 + 1; return () => { s = (s * 16807) % 2147483647; return (s % 100000) / 100000; }; }
+
+// 程序化松树：4~5 层"裙摆"叠成树冠，每层底缘长短枝交替、长枝下垂，噪声按角度取值（接缝顶点同值，不开裂）；
+// 顶点色：枝梢偏亮（受月光）、内侧与树干偏暗
+function pineGeometry(seed) {
+  const R = rnd(seed);
+  const hash = (n) => { const x = Math.sin(n * 127.1 + seed * 311.7) * 43758.5453; return x - Math.floor(x); };
+  const tip = new THREE.Color(0x2c3a32), inner = new THREE.Color(0x0b120e), bark = new THREE.Color(0x1c1612);
+  const paint = (g, fn) => {
+    const p = g.attributes.position, col = new Float32Array(p.count * 3), c = new THREE.Color();
+    for (let i = 0; i < p.count; i++) { fn(c, p.getX(i), p.getY(i), p.getZ(i)); col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
+  };
+  const parts = [];
+  const trunkH = 2.6 + R() * 0.8;
+  const trunk = new THREE.CylinderGeometry(0.13, 0.3, trunkH, 7);
+  trunk.deleteAttribute('uv');
+  trunk.translate(0, trunkH / 2, 0);
+  parts.push(paint(trunk, (c) => c.copy(bark)));
+  const tiers = 4 + Math.floor(R() * 2);
+  const SEG = 16;
+  let y = trunkH * 0.62, r = 2.4 + R() * 0.6;
+  for (let k = 0; k < tiers; k++) {
+    const h = 2.7 - k * 0.28;
+    const cone = new THREE.ConeGeometry(r, h, SEG, 2);
+    cone.deleteAttribute('uv');
+    const p = cone.attributes.position;
+    const tw = R() * Math.PI;
+    for (let i = 0; i < p.count; i++) {
+      const vx = p.getX(i), vy = p.getY(i), vz = p.getZ(i);
+      const rr = Math.hypot(vx, vz);
+      if (rr < 1e-4) continue;
+      const seg = ((Math.round(Math.atan2(vz, vx) / (Math.PI * 2) * SEG) % SEG) + SEG) % SEG;
+      const bottom = vy < -h / 2 + 1e-3;
+      const long = seg % 2 === 0;
+      const n = 0.86 + hash(seg + k * 37) * 0.28;
+      const kk = bottom ? (long ? 1.0 : 0.66) * n : (0.92 + (long ? 0.08 : 0)) * (0.95 + n * 0.05);
+      p.setX(i, vx * kk); p.setZ(i, vz * kk);
+      if (bottom && long) p.setY(i, vy - h * (0.1 + hash(seg * 3 + k) * 0.12));
+    }
+    let g = mergeVertices(cone);
+    g.rotateY(tw);
+    g.translate((R() - 0.5) * 0.18, y + h / 2, (R() - 0.5) * 0.18);
+    const y0 = y, h0 = h;
+    g = paint(g, (c, x, yy, z) => {
+      const radial = Math.min(1, Math.hypot(x, z) / r);
+      const lowK = 1 - Math.min(1, (yy - y0 + h0 * 0.15) / (h0 * 1.15));
+      c.copy(inner).lerp(tip, Math.min(1, radial * 0.75 + lowK * 0.45));
+    });
+    parts.push(g);
+    y += h * 0.52; r *= 0.74;
+  }
+  const geo = mergeGeometries(parts);
+  geo.computeVertexNormals();
+  return geo;
+}
 
 function stoneTex() {
   const R = rnd(5);
@@ -173,11 +230,11 @@ function makeSky() {
     uniforms: {
       top: { value: new THREE.Color(0x05070d) }, horizon: { value: new THREE.Color(0x1a2230) },
       moonDir: { value: new THREE.Vector3(-0.5, 0.45, -0.75).normalize() }, moonColor: { value: new THREE.Color(0xf4ecd8) },
-      moonSize: { value: 0.035 }, time: { value: 0 }, cloudColor: { value: new THREE.Color(0x2a3040) },
+      moonSize: { value: 0.035 }, time: { value: 0 }, cloudColor: { value: new THREE.Color(0x2a3040) }, flash: { value: 0 }, eclipse: { value: 0 },
     },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
     fragmentShader: `
-      uniform vec3 top; uniform vec3 horizon; uniform vec3 moonDir; uniform vec3 moonColor; uniform float moonSize; uniform float time; uniform vec3 cloudColor;
+      uniform vec3 top; uniform vec3 horizon; uniform vec3 moonDir; uniform vec3 moonColor; uniform float moonSize; uniform float time; uniform vec3 cloudColor; uniform float flash; uniform float eclipse;
       varying vec3 vDir;
       float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
       float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
@@ -195,13 +252,20 @@ function makeSky() {
         float md = dot(d, moonDir);
         float disk = smoothstep(cos(moonSize * 1.04), cos(moonSize * 0.96), md);
         float crater = fbm(d.xy * 160.0) * 0.28;
-        col = mix(col, moonColor * (1.05 - crater), disk);
-        col += moonColor * pow(max(md, 0.0), 900.0) * 0.5 + moonColor * pow(max(md,0.0), 40.0) * 0.1;
+        // 日食般的血月：暗盘 + 日冕环
+        float ang = acos(clamp(md, -1.0, 1.0));
+        float cq = (ang - moonSize) / (moonSize * 0.14);
+        float corona = exp(-cq * cq) + exp(-max(ang - moonSize, 0.0) / (moonSize * 0.9)) * 0.35 * step(moonSize, ang);
+        vec3 moonCol = mix(moonColor * (1.05 - crater), moonColor * 0.05 * (1.0 + crater), eclipse);
+        col = mix(col, moonCol, disk);
+        col += moonColor * corona * eclipse * 1.7;
+        col += (moonColor * pow(max(md, 0.0), 900.0) * 0.5 + moonColor * pow(max(md,0.0), 40.0) * 0.1) * (1.0 - eclipse * 0.7);
         // 流云
         vec2 cp = d.xz / max(d.y + 0.15, 0.05) * 1.6 + vec2(time * 0.01, time * 0.004);
         float c = smoothstep(0.45, 0.85, fbm(cp));
         float lit = pow(max(md,0.0), 6.0);
         col = mix(col, cloudColor + moonColor * lit * 0.35, c * 0.75 * smoothstep(0.0, 0.25, d.y));
+        col += vec3(0.55, 0.6, 0.8) * flash * (0.25 + 1.2 * c) * smoothstep(-0.05, 0.3, d.y);
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -264,9 +328,39 @@ function ridge(w, y, mat, accent) {
 }
 
 // ---------------------------------------------------------------- 世界
+// 湿石板：程序噪声生成积水洼（低粗糙度、压平法线、压暗反照率），积水倒映环境光
+function wetGround(mat, wetU) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uWet = wetU;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGW;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vGW; uniform float uWet;
+float gnHash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 45758.5453); }
+float gnNoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
+  return mix(mix(gnHash(i), gnHash(i+vec2(1,0)), u.x), mix(gnHash(i+vec2(0,1)), gnHash(i+vec2(1,1)), u.x), u.y); }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+float gnP = gnNoise(vGW.xz * 0.16) * 0.62 + gnNoise(vGW.xz * 0.47 + 7.0) * 0.38;
+// 积水洼：近乎镜面（月亮在水里是一个小而亮的倒影，而不是一大片泛白）；其余石板只是潮湿
+float gnWet = smoothstep(0.64 - uWet * 0.12, 0.69 - uWet * 0.12, gnP) * 0.95;
+float gnDamp = uWet * 0.6;
+roughnessFactor = mix(roughnessFactor, 0.42, gnDamp);
+roughnessFactor = mix(roughnessFactor, 0.08, gnWet);
+diffuseColor.rgb *= (1.0 - 0.22 * gnDamp) * (1.0 - 0.6 * gnWet);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+normal = normalize(mix(normal, nonPerturbedNormal, gnWet * 0.95));`);
+  };
+  mat.customProgramCacheKey = () => 'wet-ground-v2';
+}
+
 export class World {
-  constructor(scene) {
+  constructor(scene, opts = {}) {
     this.scene = scene;
+    this.env = opts.env || null;
+    this.wetU = { value: 0.15 };
+    this.shadowExtent = 28;
     this.obstacles = [];
     this.spawnPoints = [];
     this.animated = [];   // { update(dt,t) }
@@ -290,7 +384,7 @@ export class World {
 
   build() {
     const scene = this.scene;
-    scene.fog = new THREE.FogExp2(0x0c1018, 0.018);
+    scene.fog = new HeightFog(0x0c1018, 0.018);
     this.sky = makeSky();
     this.sky.userData.dynamic = true;
     scene.add(this.sky);
@@ -299,14 +393,15 @@ export class World {
     this.hemi = new THREE.HemisphereLight(0x8aa0c8, 0x2a2418, 0.75);
     scene.add(this.hemi);
     this.moon = new THREE.DirectionalLight(0xc8d8ff, 1.35);
-    this.moon.position.set(-36, 44, -48);
+    this.moon.position.copy(MOON_DIR).multiplyScalar(70);
     this.moon.castShadow = true;
     this.moon.shadow.mapSize.set(2048, 2048);
     const sc = this.moon.shadow.camera;
-    sc.left = -46; sc.right = 46; sc.top = 46; sc.bottom = -46; sc.near = 1; sc.far = 160;
-    this.moon.shadow.bias = -0.0005;
-    this.moon.shadow.normalBias = 0.03;
+    sc.left = -this.shadowExtent; sc.right = this.shadowExtent; sc.top = this.shadowExtent; sc.bottom = -this.shadowExtent; sc.near = 1; sc.far = 170;
+    this.moon.shadow.bias = -0.0004;
+    this.moon.shadow.normalBias = 0.025;
     scene.add(this.moon);
+    scene.add(this.moon.target);
     this.rim = new THREE.DirectionalLight(0xff9a60, 0.25);
     this.rim.position.set(30, 10, 40);
     scene.add(this.rim);
@@ -315,7 +410,7 @@ export class World {
     stone.map.repeat.set(10, 10); stone.normalMap.repeat.set(10, 10);
     dirt.map.repeat.set(24, 24); dirt.normalMap.repeat.set(24, 24);
     this.mats = {
-      stoneFloor: new THREE.MeshStandardMaterial({ map: stone.map, normalMap: stone.normalMap, roughness: 0.92, normalScale: new THREE.Vector2(0.8, 0.8) }),
+      stoneFloor: new THREE.MeshStandardMaterial({ map: stone.map, normalMap: stone.normalMap, roughness: 0.82, normalScale: new THREE.Vector2(0.9, 0.9) }),
       dirt: new THREE.MeshStandardMaterial({ map: dirt.map, normalMap: dirt.normalMap, roughness: 1 }),
       brick: new THREE.MeshStandardMaterial({ map: brick.map, normalMap: brick.normalMap, roughness: 0.95 }),
       plaster: new THREE.MeshStandardMaterial({ map: plasterTex(), roughness: 0.95 }),
@@ -335,6 +430,7 @@ export class World {
       talisman: new THREE.MeshStandardMaterial({ map: talismanTexture(64, 160), roughness: 0.9, side: THREE.DoubleSide }),
     };
 
+    wetGround(this.mats.stoneFloor, this.wetU);
     // 地面：中央青石广场 + 外圈泥地
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), this.mats.dirt);
     ground.rotation.x = -Math.PI / 2;
@@ -371,6 +467,9 @@ export class World {
     this.buildGhostFires();
     this.buildBamboo();      // 第二章专属
     this.buildEmbers();      // 第三章专属
+    this.buildGate();        // 第三、四章：鬼门
+    this.buildRain();        // 第二章：夜雨
+    this.buildGrass();       // 荒草（随风摇曳）
 
     this.bakeStatic();
 
@@ -937,23 +1036,23 @@ export class World {
 
   // 墙外远景：树影 + 远山
   buildOuterScenery() {
-    const trunk = new THREE.CylinderGeometry(0.2, 0.35, 7, 6);
-    trunk.translate(0, 3.5, 0);
-    const crown = new THREE.ConeGeometry(2.4, 6, 7);
-    crown.translate(0, 8, 0);
-    const treeGeo = mergeGeometries([trunk, crown]);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x0e1612, roughness: 1 });
-    const n = 90;
-    const inst = new THREE.InstancedMesh(treeGeo, mat, n);
-    const m = new THREE.Matrix4();
+    // 三种随机种子的松树轮流排布，避免林线重复；略微倾斜、高矮不一
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+    const variants = [pineGeometry(11), pineGeometry(23), pineGeometry(47)];
+    const n = 114;
+    const insts = variants.map((g) => new THREE.InstancedMesh(g, mat, Math.ceil(n / variants.length)));
+    const counts = insts.map(() => 0);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.05;
       const r = ARENA_HALF + 5 + Math.random() * 18;
-      const s = 0.7 + Math.random() * 0.8;
-      m.compose(V(Math.cos(a) * r, 0, Math.sin(a) * r), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.random() * 6), V(s, s * (0.8 + Math.random() * 0.5), s));
-      inst.setMatrixAt(i, m);
+      const s = 0.85 + Math.random() * 0.8 + (r - ARENA_HALF - 5) / 18 * 0.35;
+      e.set((Math.random() - 0.5) * 0.08, Math.random() * 6.28, (Math.random() - 0.5) * 0.08);
+      m.compose(V(Math.cos(a) * r, 0, Math.sin(a) * r), q.setFromEuler(e), V(s, s * (0.85 + Math.random() * 0.45), s));
+      const v = i % variants.length;
+      insts[v].setMatrixAt(counts[v]++, m);
     }
-    this.scene.add(inst);
+    insts.forEach((inst, v) => { inst.count = counts[v]; this.scene.add(inst); });
     // 远山剪影
     const pos = [];
     const seg = 90;
@@ -1012,6 +1111,211 @@ export class World {
         s.material.opacity = 0.55 + Math.sin(t * 5 + i) * 0.25;
       });
     } });
+  }
+
+
+  // 鬼门：悬于义庄大殿之后的巨大魂环，漩涡吞吐阴气
+  buildGate() {
+    const g = new THREE.Group();
+    const stone = new THREE.MeshStandardMaterial({ color: 0x1a1218, roughness: 0.55, metalness: 0.25, emissive: 0x4a0a2a, emissiveIntensity: 1.3 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(7.2, 0.6, 18, 72), stone);
+    g.add(ring);
+    // 环上符文骨刺
+    const runeMat = new THREE.SpriteMaterial({ map: softDotTexture('rgba(255,140,220,1)', 'rgba(160,40,255,0)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+    const runes = [];
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.3 + (i % 3) * 0.5, 6), stone);
+      sp.position.set(Math.cos(a) * 7.9, Math.sin(a) * 7.9, 0);
+      sp.rotation.z = a - Math.PI / 2;
+      g.add(sp);
+      const r = new THREE.Sprite(runeMat.clone());
+      r.position.set(Math.cos(a + 0.13) * 7.2, Math.sin(a + 0.13) * 7.2, 0.62);
+      r.scale.setScalar(0.9);
+      r.userData.ph = i * 0.7;
+      g.add(r); runes.push(r);
+    }
+    this.gateU = { time: { value: 0 }, cA: { value: new THREE.Color(0xff4a7a) }, cB: { value: new THREE.Color(0x3a0a6a) }, power: { value: 1 } };
+    const portal = new THREE.Mesh(new THREE.CircleGeometry(6.8, 96), new THREE.ShaderMaterial({
+      uniforms: this.gateU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: `
+        uniform float time; uniform vec3 cA; uniform vec3 cB; uniform float power; varying vec2 vUv;
+        float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+        float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
+        void main(){
+          vec2 p = vUv * 2.0 - 1.0; float r = length(p); if (r > 1.0) discard;
+          float a = atan(p.y, p.x);
+          float sw = a * 3.0 + time * 0.9 - log(r + 0.02) * 4.0;
+          float v = n(vec2(sw, r * 6.0 - time * 1.4)) * 0.6 + n(vec2(sw * 2.0 + 3.0, r * 12.0 - time * 2.4)) * 0.4;
+          float core = smoothstep(0.55, 0.0, r);
+          vec3 col = mix(cB, cA, v) * (0.35 + v * 1.4) + vec3(1.0, 0.85, 0.95) * core * core * 1.6;
+          float alpha = smoothstep(1.0, 0.82, r) * (0.45 + 0.55 * v) * power;
+          gl_FragColor = vec4(col * alpha, alpha);
+        }`,
+    }));
+    g.add(portal);
+    // 锁魂链：自环垂向地面
+    const chainMat = new THREE.MeshStandardMaterial({ color: 0x5a5a66, metalness: 0.9, roughness: 0.35, emissive: 0x1a0a2a });
+    const link = new THREE.TorusGeometry(0.16, 0.045, 5, 10);
+    for (const [ax, len] of [[-5.6, 14], [5.6, 14], [-2.5, 17], [2.5, 17]]) {
+      const n = Math.floor(len / 0.26);
+      const inst = new THREE.InstancedMesh(link, chainMat, n);
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion();
+      for (let i = 0; i < n; i++) {
+        q.setFromEuler(new THREE.Euler(0, (i % 2) * Math.PI / 2, Math.PI / 2));
+        m.compose(V(ax + Math.sin(i * 0.08) * 0.3, -6.2 - i * 0.26, 2 + i * 0.12), q, V(1, 1, 1));
+        inst.setMatrixAt(i, m);
+      }
+      g.add(inst);
+    }
+    const glow = new THREE.PointLight(0xc040ff, 60, 60, 1.6);
+    glow.position.set(0, 0, 4);
+    g.add(glow);
+    g.position.set(0, 15, -ARENA_HALF - 4);
+    g.visible = false;
+    g.userData.dynamic = true;
+    this.scene.add(g);
+    this.chapterSets.gate = g;
+    this.animated.push({ update: (dt, t) => {
+      if (!g.visible) return;
+      this.gateU.time.value = t;
+      ring.rotation.z = t * 0.05;
+      for (const r of runes) r.material.opacity = (0.45 + 0.55 * Math.max(0, Math.sin(t * 2.2 + r.userData.ph))) * this.gateU.power.value;
+      glow.intensity = 50 + Math.sin(t * 3) * 12;
+    } });
+  }
+
+  // 夜雨：GPU 线段雨丝，随相机平铺环绕（零 CPU 开销）
+  buildRain() {
+    const N = 3200;
+    const pos = new Float32Array(N * 2 * 3);
+    const seed = new Float32Array(N * 2 * 4);
+    for (let i = 0; i < N; i++) {
+      const sx = Math.random(), sz = Math.random(), sp = 0.85 + Math.random() * 0.4, ph = Math.random();
+      for (let k = 0; k < 2; k++) {
+        const j = i * 2 + k;
+        pos[j * 3 + 1] = k;
+        seed[j * 4] = sx; seed[j * 4 + 1] = sz; seed[j * 4 + 2] = sp; seed[j * 4 + 3] = ph;
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('seed', new THREE.BufferAttribute(seed, 4));
+    this.rainU = { time: { value: 0 }, center: { value: new THREE.Vector3() }, color: { value: new THREE.Color(0xa8c0d0) } };
+    const mat = new THREE.ShaderMaterial({
+      uniforms: this.rainU, transparent: true, depthWrite: false,
+      vertexShader: `
+        attribute vec4 seed; uniform float time; uniform vec3 center; varying float vA;
+        void main(){
+          float B = 44.0, H = 22.0;
+          vec2 xz = mod(seed.xy * B - center.xz + time * vec2(1.2, 0.4), B) - B * 0.5 + center.xz;
+          float y = mod(seed.w * H - time * 17.0 * seed.z, H) + max(0.0, center.y - 8.0);
+          vec3 p = vec3(xz.x + position.y * 0.07, y + position.y * 0.62, xz.y + position.y * 0.02);
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          vA = (0.15 + 0.4 * position.y) * smoothstep(40.0, 4.0, -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: 'uniform vec3 color; varying float vA; void main(){ gl_FragColor = vec4(color, vA); }',
+    });
+    const rain = new THREE.LineSegments(geo, mat);
+    rain.frustumCulled = false;
+    rain.visible = false;
+    rain.userData.dynamic = true;
+    this.scene.add(rain);
+    this.chapterSets.rain = rain;
+  }
+
+  // 天际闪电
+  lightning(power = 1) {
+    this.flashT = 0.45;
+    this.flashPow = power;
+  }
+
+  // 两套氛围之间插值（黎明过渡），不重建环境贴图
+  blendAmbience(A, B, k) {
+    const lerpC = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), k).getHex();
+    const lerpN = (a, b) => (a ?? 0) + ((b ?? 0) - (a ?? 0)) * k;
+    const o = { ...B };
+    for (const key of ['skyTop', 'skyHorizon', 'moonColor', 'moonLight', 'fog', 'hemiSky', 'hemiGround', 'cloud', 'ghostFire', 'mist', 'mountain']) o[key] = lerpC(A[key] ?? 0x000000, B[key] ?? 0x000000);
+    for (const key of ['moonIntensity', 'moonSize', 'fogDensity', 'hemi', 'wet']) o[key] = lerpN(A[key], B[key]);
+    o.sets = k < 0.5 ? A.sets : B.sets;
+    this.setAmbience(o, { skipEnv: true });
+  }
+
+
+  // 荒草：墙根、坟地、石缝里的野草丛（实例化十字面片，顶点着色器随风摇摆）
+  buildGrass() {
+    const tex = canvasTexture(128, 128, (g, w, h) => {
+      g.clearRect(0, 0, w, h);
+      for (let i = 0; i < 26; i++) {
+        const x0 = w / 2 + (Math.random() - 0.5) * 40, lean = (Math.random() - 0.5) * 70, ht = h * (0.45 + Math.random() * 0.5);
+        const v = 70 + Math.random() * 80;
+        g.strokeStyle = `rgb(${v * 0.8},${v},${v * 0.55})`;
+        g.lineWidth = 2 + Math.random() * 3;
+        g.lineCap = 'round';
+        g.beginPath(); g.moveTo(x0, h); g.quadraticCurveTo(x0 + lean * 0.3, h - ht * 0.6, x0 + lean, h - ht); g.stroke();
+      }
+    });
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    const a = new THREE.PlaneGeometry(0.9, 0.7); a.translate(0, 0.35, 0);
+    const b = a.clone(); b.rotateY(Math.PI / 2);
+    const c = a.clone(); c.rotateY(Math.PI / 4);
+    const geo = mergeGeometries([a, b, c]);
+    this.grassU = { uTime: { value: 0 }, uWind: { value: 1 } };
+    const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.95, color: 0xffffff });
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.grassU);
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uWind;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+#ifdef USE_INSTANCING
+  vec2 gp = instanceMatrix[3].xz;
+#else
+  vec2 gp = vec2(0.0);
+#endif
+  float gk = max(0.0, transformed.y) / 0.7;
+  float gw = sin(uTime * 1.6 + gp.x * 0.35 + gp.y * 0.21) * 0.6 + sin(uTime * 3.7 + gp.x * 1.3) * 0.25;
+  transformed.x += gw * 0.14 * gk * gk * uWind;
+  transformed.z += cos(uTime * 1.3 + gp.y * 0.3) * 0.06 * gk * gk * uWind;`);
+    };
+    mat.customProgramCacheKey = () => 'grass-v1';
+    const N = 2600;
+    const inst = new THREE.InstancedMesh(geo, mat, N);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), col = new THREE.Color();
+    let n = 0;
+    const L = ARENA_HALF;
+    const blocked = (x, z) => this.obstacles.some((bx) => x > bx.min.x - 0.3 && x < bx.max.x + 0.3 && z > bx.min.z - 0.3 && z < bx.max.z + 0.3);
+    const put = (x, z, sc = 1) => {
+      if (n >= N || blocked(x, z)) return;
+      q.setFromAxisAngle(V(0, 1, 0), Math.random() * Math.PI);
+      const s = sc * (0.7 + Math.random() * 0.7);
+      m.compose(V(x, 0, z), q, V(s, s * (0.8 + Math.random() * 0.5), s));
+      inst.setMatrixAt(n, m);
+      inst.setColorAt(n, col.setHSL(0.17 + Math.random() * 0.08, 0.35 + Math.random() * 0.2, 0.22 + Math.random() * 0.14));
+      n++;
+    };
+    // 墙根一圈
+    for (let i = 0; i < 1500; i++) {
+      const side = i % 4, along = (Math.random() - 0.5) * (L * 2 - 1), d = L - 0.6 - Math.pow(Math.random(), 1.6) * 4.2;
+      if (side === 0) put(along, -d); else if (side === 1) { if (Math.abs(along) > 3.6) put(along, d); } else if (side === 2) put(-d, along); else put(d, along);
+    }
+    // 乱葬岗
+    for (let i = 0; i < 420; i++) put(L - 10 + (Math.random() - 0.5) * 16, -L + 10 + (Math.random() - 0.5) * 16, 1.15);
+    // 石缝里零星的草
+    for (let i = 0; i < 480; i++) {
+      const x = (Math.random() - 0.5) * (L * 2 - 10), z = (Math.random() - 0.5) * (L * 2 - 10);
+      if (Math.hypot(x, z - 8) < 6) continue;
+      put(x, z, 0.55);
+    }
+    inst.count = n;
+    inst.receiveShadow = true;
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.userData.dynamic = true;
+    this.scene.add(inst);
+    this.grass = inst;
+    this.grassMat = mat;
   }
 
   // 第二章：竹林环绕
@@ -1158,12 +1462,13 @@ export class World {
   }
 
   // ---------------- 章节氛围
-  setAmbience(a) {
+  setAmbience(a, opt = {}) {
     if (!a) return;
     const u = this.sky.material.uniforms;
     u.top.value.set(a.skyTop); u.horizon.value.set(a.skyHorizon);
     u.moonColor.value.set(a.moonColor); u.moonSize.value = a.moonSize ?? 0.035;
     u.cloudColor.value.set(a.cloud ?? 0x2a3040);
+    u.eclipse.value = a.eclipse ?? 0;
     this.scene.fog.color.set(a.fog);
     this.scene.fog.density = a.fogDensity;
     this.scene.background.set(a.fog);
@@ -1178,11 +1483,49 @@ export class World {
     }
     for (const gf of this.ghostFires) gf.material.color.set(a.ghostFire ?? 0x9fd8ff);
     for (const m of this.mist) m.material.color.set(a.mist ?? 0xffffff);
+    if (this.grassMat) { this.grassMat.color.set(a.grass ?? 0xffffff); this.grassU.uWind.value = a.rain ? 1.8 : 1; }
+    this.wetU.value = a.wet ?? 0.15;
+    if (this.chapterSets.rain) this.chapterSets.rain.visible = !!a.rain;
+    this.baseMoon = a.moonIntensity; this.baseHemi = a.hemi;
+    if (this.env && !opt.skipEnv) {
+      this.scene.environment = this.env.get(a);
+      this.scene.environmentIntensity = a.envIntensity ?? 0.6;
+    }
+    this.ambience = a;
   }
 
-  update(dt) {
+  // 阴影相机跟随焦点（按阴影贴图像素对齐，避免移动时阴影闪烁）
+  setShadowExtent(ext) {
+    this.shadowExtent = ext;
+    const sc = this.moon.shadow.camera;
+    sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext;
+    sc.updateProjectionMatrix();
+  }
+
+  focusShadow(x, z) {
+    const texel = (this.shadowExtent * 2) / this.moon.shadow.mapSize.x;
+    x = Math.round(x / texel) * texel;
+    z = Math.round(z / texel) * texel;
+    this.moon.target.position.set(x, 0, z);
+    this.moon.position.set(x + MOON_DIR.x * 70, MOON_DIR.y * 70, z + MOON_DIR.z * 70);
+    this.moon.target.updateMatrixWorld();
+  }
+
+  update(dt, camPos = null) {
     this.time += dt;
     this.sky.material.uniforms.time.value = this.time;
+    this.scene.fog.time = this.time;
+    if (this.rainU) { this.rainU.time.value = this.time; if (camPos) this.rainU.center.value.copy(camPos); }
+    if (this.grassU) this.grassU.uTime.value = this.time;
+    if (this.flashT > 0) {
+      this.flashT -= dt;
+      const k = Math.max(0, this.flashT / 0.45);
+      const flick = k * (0.6 + 0.4 * Math.sin(this.time * 60)) * (this.flashPow || 1);
+      this.sky.material.uniforms.flash.value = flick;
+      this.moon.intensity = (this.baseMoon ?? 1.3) * (1 + flick * 2.2);
+      this.hemi.intensity = (this.baseHemi ?? 0.45) * (1 + flick * 2.5);
+      if (this.flashT <= 0) { this.sky.material.uniforms.flash.value = 0; this.moon.intensity = this.baseMoon ?? 1.3; this.hemi.intensity = this.baseHemi ?? 0.45; }
+    }
     for (const a of this.animated) a.update(dt, this.time);
   }
 

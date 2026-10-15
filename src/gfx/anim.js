@@ -243,6 +243,142 @@ export function poseWuchang(b, st, black) {
   R(b.hand_L, 0.1, 0, 0); R(b.hand_R, 0.1, 0, 0);
 }
 
+// ---------------------------------------------------------------- 阴兵：持盾列阵、长枪突刺
+export function poseSoldier(b, st) {
+  const t = st.t, ph = st.phase;
+  const amt = Math.min(1, st.speedK) * 0.7;
+  legCycle(b, ph, amt, 0.9);
+  R(b.hips, 0, Math.sin(ph) * 0.08 * amt, 0);
+  R(b.spine, 0.08, 0.15, 0);
+  R(b.chest, 0, 0.1, 0);
+  R(b.neck, 0, -0.15, 0);
+  R(b.head, -0.05 + Math.sin(t * 1.1 + st.seed) * 0.03, -0.1, 0);
+  // 左臂护盾
+  R(b.arm_L, -0.32, 0, -0.2); R(b.fore_L, -0.3, 0, 0); R(b.hand_L, 0, 0, 0);
+  const atk = st.atk;
+  if (atk >= 0) {
+    // 突刺：后引 → 前刺 → 收枪
+    const pull = atk < 0.4 ? ease(atk / 0.4) : 0;
+    const stab = atk >= 0.4 && atk < 0.6 ? ease((atk - 0.4) / 0.2) : atk >= 0.6 ? 1 - ease((atk - 0.6) / 0.4) : 0;
+    const ax = -0.25 + pull * 0.5 - stab * 0.85;
+    const fx = -0.45 + stab * 0.25;
+    R(b.arm_R, ax, 0, 0.12); R(b.fore_R, fx, 0, 0); R(b.hand_R, -(ax + fx) - 0.1, 0, 0);
+    b.spine.rotation.x += stab * 0.35 - pull * 0.15;
+    b.spine.rotation.y += pull * 0.35 - stab * 0.25;
+    b.thigh_L.rotation.x -= stab * 0.5; b.shin_L.rotation.x += stab * 0.3;
+  } else {
+    R(b.arm_R, -0.25 + Math.sin(ph) * 0.12 * amt, 0, 0.12); R(b.fore_R, -0.45, 0, 0); R(b.hand_R, 0.35, 0, 0);
+  }
+  if (st.hit > 0) { b.spine.rotation.x -= st.hit * 0.3; b.head.rotation.x -= st.hit * 0.3; }
+}
+
+// ---------------------------------------------------------------- 玄阴子（人形）：悬浮、掐诀、挥剑、召雷
+export function poseSorcerer(b, st) {
+  const t = st.t, mode = st.mode, k = clamp01(st.modeT ?? 0);
+  const sway = Math.sin(t * 1.2 + st.seed);
+  R(b.hips, 0, sway * 0.06, 0);
+  R(b.spine, 0.04, -sway * 0.05, 0); R(b.chest, 0, 0, 0);
+  R(b.neck, -0.04, 0, 0); R(b.head, -0.08, Math.sin(t * 0.5) * 0.15, 0);
+  // 腿收拢微曲（悬浮）
+  R(b.thigh_L, -0.15, 0, 0.04); R(b.thigh_R, 0.05, 0, -0.04);
+  R(b.shin_L, 0.35, 0, 0); R(b.shin_R, 0.2, 0, 0);
+  R(b.foot_L, 0.4, 0, 0); R(b.foot_R, 0.35, 0, 0);
+  // 默认：左手拂尘横胸，右手剑垂
+  R(b.arm_L, -0.7, 0, -0.35); R(b.fore_L, -1.3, 0, 0); R(b.hand_L, 0.2, 0, 0);
+  R(b.arm_R, -0.15, 0, 0.25); R(b.fore_R, -0.2, 0, 0); R(b.hand_R, 0, 0, 0);
+  if (mode === 'cast' || mode === 'thunder') {
+    const u = Math.sin(k * PI);
+    R(b.arm_L, -1.4 - u * 1.4, 0, 0.3 + u * 0.4); R(b.fore_L, -0.3, 0, 0);
+    R(b.arm_R, -1.6 - u * 0.4, 0, -0.2); R(b.fore_R, -0.1, 0, 0);
+    b.spine.rotation.x -= u * 0.25; b.head.rotation.x -= u * 0.35;
+  } else if (mode === 'swords') {
+    const u = k < 0.5 ? ease(k * 2) : 1 - ease((k - 0.5) * 2) * 0.6;
+    R(b.arm_R, -1.55 * u - 0.2, 0, 0.25 - u * 0.4); R(b.fore_R, -0.1, 0, 0);
+    R(b.arm_L, -0.4 - u * 0.6, 0, 0.6 * u); R(b.fore_L, -1.0, 0, 0);
+    b.spine.rotation.y = -0.4 * u;
+  } else if (mode === 'summon') {
+    const u = Math.sin(k * PI);
+    R(b.arm_L, -0.4 - u * 0.8, 0, 1.2 * u + 0.2); R(b.arm_R, -0.4 - u * 0.8, 0, -1.2 * u - 0.2);
+    R(b.fore_L, -0.4, 0, 0); R(b.fore_R, -0.4, 0, 0);
+    b.head.rotation.x -= u * 0.4;
+  } else if (mode === 'blink') {
+    const u = Math.sin(k * PI);
+    b.spine.rotation.x += u * 0.5; R(b.thigh_L, -0.6 * u, 0, 0); R(b.thigh_R, -0.6 * u, 0, 0); R(b.shin_L, 1.0 * u, 0, 0); R(b.shin_R, 1.0 * u, 0, 0);
+  } else if (mode === 'slash' || st.atk >= 0) {
+    const a = st.atk >= 0 ? st.atk : k;
+    const u = a < 0.4 ? ease(a / 0.4) : 1 - ease((a - 0.4) / 0.3);
+    R(b.arm_R, -2.4 * u - 0.3, 0, 0.6 - u * 1.4); R(b.fore_R, -0.3 * u, 0, 0);
+    b.spine.rotation.y = 0.5 * u - 0.6 * (a > 0.4 ? 1 - u : 0);
+  } else if (mode === 'transform') {
+    const u = ease(k);
+    R(b.arm_L, -0.3, 0, 1.6 * u); R(b.arm_R, -0.3, 0, -1.6 * u);
+    R(b.fore_L, -0.2, 0, 0); R(b.fore_R, -0.2, 0, 0);
+    b.spine.rotation.x = -0.5 * u; b.head.rotation.x = -0.6 * u + Math.sin(t * 30) * 0.04 * u;
+  }
+}
+
+// ---------------------------------------------------------------- 尸化玄阴子：佝偻扑击、双爪连斩、冲撞、跃击
+export function poseBeast(b, st) {
+  const t = st.t, mode = st.mode, k = clamp01(st.modeT ?? 0);
+  if (mode === 'charge') { poseHou(b, { ...st, mode: 'charge' }); b.spine.rotation.x += 0.1; return; }
+  if (mode === 'windup' || mode === 'leapWind') { poseHou(b, { ...st, mode: 'windup' }); return; }
+  if (mode === 'slam' || mode === 'leapLand') { poseHou(b, { ...st, mode: 'slam' }); return; }
+  if (mode === 'roar' || mode === 'transform') { poseHou(b, { ...st, mode: 'roar' }); return; }
+  if (mode === 'leap') {
+    R(b.spine, 0.3, 0, 0); R(b.chest, 0.1, 0, 0);
+    R(b.arm_L, -2.6, 0, 0.5); R(b.arm_R, -2.6, 0, -0.5);
+    R(b.fore_L, -0.4, 0, 0); R(b.fore_R, -0.4, 0, 0);
+    R(b.thigh_L, -1.0, 0, 0.15); R(b.thigh_R, -0.6, 0, -0.15); R(b.shin_L, 1.4, 0, 0); R(b.shin_R, 1.0, 0, 0);
+    return;
+  }
+  const ph = t * 6.5;
+  const amt = Math.min(1, st.speedK);
+  legCycle(b, ph, amt * 0.8, 1.1);
+  R(b.spine, 0.45, Math.sin(ph) * 0.12 * amt, 0); R(b.chest, 0.15, 0, 0);
+  R(b.neck, -0.5, 0, 0); R(b.head, -0.15, Math.sin(t * 0.9) * 0.2, 0);
+  const atk = st.atk;
+  if (atk >= 0) {
+    // 左右双爪连斩
+    const a1 = atk < 0.5 ? Math.sin(atk / 0.5 * PI) : 0;
+    const a2 = atk >= 0.4 ? Math.sin(clamp01((atk - 0.4) / 0.5) * PI) : 0;
+    R(b.arm_R, -0.6 - a1 * 2.0, 0, -0.3 - a1 * 0.6); R(b.arm_L, -0.6 - a2 * 2.0, 0, 0.3 + a2 * 0.6);
+    R(b.fore_R, -0.6, 0, 0); R(b.fore_L, -0.6, 0, 0);
+    b.spine.rotation.y = (a1 - a2) * 0.6;
+  } else {
+    R(b.arm_L, -0.5 + Math.sin(ph) * 0.3 * amt, 0, 0.45); R(b.arm_R, -0.5 - Math.sin(ph) * 0.3 * amt, 0, -0.45);
+    R(b.fore_L, -0.8, 0, 0); R(b.fore_R, -0.8, 0, 0);
+  }
+  R(b.hand_L, 0.3, 0, 0); R(b.hand_R, 0.3, 0, 0);
+}
+
+// ---------------------------------------------------------------- 首领破绽：单膝跪地、垂首喘息
+export function poseStagger(b, k, t = 0) {
+  const u = ease(k * 3);
+  b.spine.rotation.x = 0.7 * u; b.chest.rotation.x = 0.2 * u;
+  b.neck.rotation.x = 0.3 * u; b.head.rotation.x = 0.3 * u + Math.sin(t * 9) * 0.05;
+  b.thigh_L.rotation.set(-1.4 * u, 0, 0.1); b.shin_L.rotation.set(1.5 * u, 0, 0);
+  b.thigh_R.rotation.set(0.1 * u, 0, -0.1); b.shin_R.rotation.set(1.8 * u, 0, 0); b.foot_R.rotation.set(-0.5 * u, 0, 0);
+  b.arm_L.rotation.set(0.2, 0, 0.3 * u); b.arm_R.rotation.set(-0.5 * u, 0, -0.2);
+  b.fore_L.rotation.set(-0.2, 0, 0); b.fore_R.rotation.set(-0.6 * u, 0, 0);
+}
+
+// ---------------------------------------------------------------- 师父魂魄：盘坐 / 合掌
+export function poseMaster(b, t, mode = 'meditate') {
+  if (mode === 'stand') {
+    R(b.spine, 0.02, 0, 0); R(b.head, -0.05 + Math.sin(t * 0.8) * 0.03, 0, 0);
+    R(b.arm_L, -0.6, 0, -0.25); R(b.fore_L, -1.3, 0, 0);
+    R(b.arm_R, -0.55, 0, 0.3); R(b.fore_R, -1.4, 0, 0);
+    return;
+  }
+  R(b.hips, 0, 0, 0);
+  R(b.spine, -0.05 + Math.sin(t * 0.9) * 0.02, 0, 0);
+  R(b.head, 0.15, 0, 0);
+  R(b.thigh_L, -1.45, 0.6, 0.5); R(b.thigh_R, -1.45, -0.6, -0.5);
+  R(b.shin_L, 2.3, 0, 0); R(b.shin_R, 2.3, 0, 0);
+  R(b.arm_L, -0.6, 0, -0.35); R(b.fore_L, -1.35, 0.3, 0);
+  R(b.arm_R, -0.6, 0, 0.35); R(b.fore_R, -1.35, -0.3, 0);
+}
+
 // ---------------------------------------------------------------- 图鉴 / 菜单 专属舞步
 export function poseDance(kind, b, t, seed = 0) {
   const beat = t * 2.2 + seed;
@@ -273,6 +409,20 @@ export function poseDance(kind, b, t, seed = 0) {
     case 'hou':
       poseHou(b, { t, mode: (t % 6) < 2 ? 'roar' : 'walk', modeT: ((t % 6) / 2), speedK: 0.3, atk: -1 });
       return 0;
+    case 'soldier':
+      poseSoldier(b, { t, phase: t * 4, speedK: 0.3, atk: (t * 0.5) % 2 < 1 ? (t * 0.5) % 1 : -1, hit: 0, seed });
+      return 0;
+    case 'sorcerer': {
+      const c = (t * 0.25) % 3;
+      poseSorcerer(b, { t, seed, mode: c < 1 ? 'cast' : c < 2 ? 'swords' : 'summon', modeT: c % 1, atk: -1 });
+      return 0.2 + Math.sin(t * 1.4) * 0.06;
+    }
+    case 'sorcererBeast':
+      poseBeast(b, { t, seed, mode: (t % 6) < 2 ? 'roar' : 'walk', modeT: (t % 6) / 2, speedK: 0.3, atk: (t % 6) > 4 ? ((t % 6) - 4) / 2 : -1 });
+      return 0;
+    case 'master':
+      poseMaster(b, t, 'stand');
+      return 0;
     default:
       return 0;
   }
@@ -291,6 +441,11 @@ export function deathTransform(kind, k) {
       return { rotX: 0, rotZ: 0, dy: ease(k) * 1.2, scaleY: 1 - ease(k) * 0.95 };
     case 'paper':
       return { rotX: ease(k * 1.5) * 0.6, rotZ: 0, dy: -ease(k) * 0.3, scaleY: 1 - ease(k) * 0.9 };
+    case 'soldier':
+      return { rotX: ease(k * 1.3) * PI / 2 * 0.92, rotZ: -0.15 * ease(k), dy: 0, scaleY: 1 };
+    case 'sorcerer':
+    case 'sorcererBeast':
+      return { rotX: -ease(k * 0.9) * PI / 2 * 0.85, rotZ: 0.1 * ease(k), dy: 0, scaleY: 1 };
     default:
       return { rotX: ease(k * 1.4) * PI / 2 * 0.95, rotZ: 0, dy: 0, scaleY: 1 };
   }

@@ -60,6 +60,7 @@ export class WeaponSystem {
     this.triggerDown = false;
     this._consumed = false;
     this.recoilKick = 0;
+    this.recoilYaw = 0;
     this.kick = 0;
     this.bobT = 0;
     this.switchAnim = 0;
@@ -174,7 +175,7 @@ export class WeaponSystem {
     Audio.setMinigunSpin(0);
     this._ensureViewmodel(id);
     this._showViewmodel();
-    Audio.reload();
+    Audio.switchWeapon();
   }
 
   cycle(delta) {
@@ -187,7 +188,7 @@ export class WeaponSystem {
     if (d.melee || this.reloading > 0 || this.ammo.mag >= d.mag) return;
     this.reloading = d.reload / this.stats.reloadMult;
     this.reloadTotal = this.reloading;
-    Audio.reload();
+    Audio.reload(d.sound === 'shotgun' ? 'shotgun' : d.sound === 'gatling' ? 'gatling' : 'pistol');
   }
 
   refillAll() {
@@ -295,6 +296,7 @@ export class WeaponSystem {
     }
     Audio.gunshot(d.sound);
     this.recoilKick = d.recoil;
+    this.recoilYaw = (Math.random() - 0.5) * d.recoil * (d.auto ? 0.9 : 0.4);
     this.kick = Math.min(1, this.kick + d.recoil * 20);
     this.trauma = Math.min(1, this.trauma + d.shake);
     // 火光
@@ -309,6 +311,7 @@ export class WeaponSystem {
       this.flashSprite.visible = true;
       this.flashLight.position.copy(mp);
       this.lastMuzzle = mp.clone().applyMatrix4(cam.matrixWorld);
+      if (d.flash > 0) this.effects.gunSmoke(this.lastMuzzle, fwd, d.pellets ? 1.8 : 1, 0.1);
       // 抛壳
       const ej = vm.position.clone().add(new THREE.Vector3(0.03, 0.04, -0.05)).applyMatrix4(cam.matrixWorld);
       const vel = right.clone().multiplyScalar(1.4 + Math.random()).addScaledVector(up, 1.6 + Math.random() * 0.8).addScaledVector(fwd, -0.3);
@@ -319,6 +322,7 @@ export class WeaponSystem {
       this.worldFlash.scale.setScalar(0.5 * d.flash);
       this.worldFlash.visible = true;
       this.lastMuzzle = mp.clone();
+      if (d.flash > 0) this.effects.gunSmoke(mp, fwd, d.pellets ? 1.8 : 1, 0.22);
       this.flashLight.intensity = 0;
       this.effects.flashLight(mp, 0xffb050, 10 * d.flash, 0.06, 6);
     }

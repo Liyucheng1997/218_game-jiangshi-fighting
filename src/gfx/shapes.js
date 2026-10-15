@@ -72,10 +72,12 @@ export function loft(pts, radii, opt = {}) {
       uv.push(j / seg, 1 - lens[i] / total);
     }
   }
+  // 侧壁绕序须与上面的外向法线一致（逆时针 = 正面朝外）；
+  // 绕序反了会被双面材质判为背面并翻转法线 —— 光照与轮廓光都会从内侧算，袖子 / 裤腿发白
   for (let i = 0; i < n - 1; i++) {
     for (let j = 0; j < seg; j++) {
       const a = i * (seg + 1) + j, b = a + seg + 1;
-      idx.push(a, b, a + 1, b, b + 1, a + 1);
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const cap = (i, flip) => {

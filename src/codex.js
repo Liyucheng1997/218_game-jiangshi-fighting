@@ -26,7 +26,7 @@ export class Codex {
     this.built = true;
     const s = this.scene;
     s.background = new THREE.Color(0x07060a);
-    s.fog = new THREE.Fog(0x07060a, 8, 22);
+    s.fog = new THREE.FogExp2(0x07060a, 0.045);
     s.add(new THREE.HemisphereLight(0x8090b0, 0x2a2018, 0.9));
     const key = new THREE.SpotLight(0xffe0c0, 60, 20, 0.5, 0.6, 1.5);
     key.position.set(2.5, 6, 5); key.target.position.set(0, 1, 0);

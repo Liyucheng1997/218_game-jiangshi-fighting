@@ -1,16 +1,19 @@
 import * as THREE from 'three';
+import { AFFIXES } from './data.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const _p = new THREE.Vector3();
+const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 
-// DOM HUD：经验条、血条、道术栏、雷达、首领血条、伤害飘字……
+// DOM HUD：经验条、血条、道术栏、雷达、首领血条与破绽、伤害飘字、连斩、闭气、精英标签、受击方向……
 export class HUD {
   constructor() {
     this.root = $('hud');
     this.el = {};
     for (const id of ['xp-fill', 'lv-num', 'ch-name', 'wave-line', 'wave-fill', 'kills', 'gold', 'timer', 'bosses', 'feed', 'crosshair', 'hitm', 'dmgs',
-      'hp-num', 'hp-fill', 'hp-lag', 'shield', 'skills', 'ab-fu', 'ab-fu-n', 'ab-ult', 'ab-dash', 'wp-name', 'ammo', 'reload', 'slots', 'banner', 'toast', 'lowhp', 'burn', 'radar']) {
+      'hp-num', 'hp-fill', 'hp-lag', 'shield', 'skills', 'ab-fu', 'ab-fu-n', 'ab-ult', 'ab-dash', 'wp-name', 'ammo', 'reload', 'slots', 'banner', 'toast', 'lowhp', 'burn', 'radar',
+      'objective', 'diff-tag', 'combo', 'breath', 'elabels', 'dmgdir', 'stealth', 'perfect']) {
       this.el[id] = $(id);
     }
     this.radarCtx = this.el.radar.getContext('2d');
@@ -18,10 +21,17 @@ export class HUD {
     this.dmgActive = [];
     this._cache = {};
     this._bossEls = [];
+    this.showNumbers = true;
+    this.labelPool = [];
+    this.dirEls = [];
+    for (let i = 0; i < 4; i++) { const d = document.createElement('div'); d.className = 'ddir'; this.el.dmgdir.appendChild(d); this.dirEls.push({ el: d, t: 0, ang: 0 }); }
+    this.comboEls = { g: this.el.combo.querySelector('.cg'), n: this.el.combo.querySelector('.cn'), t: this.el.combo.querySelector('.ct i') };
+    this.breathFill = this.el.breath.querySelector('i');
   }
 
   show() { this.root.classList.add('on'); }
-  hide() { this.root.classList.remove('on'); }
+  hide() { this.root.classList.remove('on'); this.setCine(false); }
+  setCine(v) { this.root.classList.toggle('cine', v); }
 
   _set(key, val, fn) { if (this._cache[key] !== val) { this._cache[key] = val; fn(val); } }
 
@@ -35,6 +45,9 @@ export class HUD {
     this._set('wl', line, (v) => { this.el['wave-line'].textContent = v; });
     this._set('wf', Math.round(prog * 200), (v) => { this.el['wave-fill'].style.width = v / 2 + '%'; });
   }
+
+  objective(text) { this._set('obj', text, (v) => { this.el.objective.textContent = v; this.el.objective.style.display = v ? '' : 'none'; }); }
+  difficulty(text) { this._set('dt', text, (v) => { this.el['diff-tag'].textContent = v; }); }
 
   stats(kills, gold, time) {
     this._set('k', kills, (v) => { this.el.kills.textContent = v; });
@@ -100,16 +113,64 @@ export class HUD {
     });
   }
 
-  hit(head, kill) {
+  hit(head, kill, blocked = false) {
     const h = this.el.hitm;
-    h.className = head ? 'head' : kill ? 'kill' : '';
+    h.className = blocked ? 'block' : head ? 'head' : kill ? 'kill' : '';
     h.style.opacity = '1';
     clearTimeout(this._hitT);
     this._hitT = setTimeout(() => { h.style.opacity = '0'; }, 110);
   }
 
+  // ---------------- 闭气 / 连斩 / 完美闪避
+  breath(k, holding, locked) {
+    const on = holding || k < 0.999 || locked;
+    this._set('bon', on, (v) => this.el.breath.classList.toggle('on', v));
+    this._set('blk', locked, (v) => this.el.breath.classList.toggle('lock', v));
+    this._set('bk', Math.round(k * 100), (v) => { this.breathFill.style.width = v + '%'; });
+    this._set('stl', holding, (v) => this.el.stealth.classList.toggle('on', v));
+  }
+
+  combo(n, timerK, grade) {
+    this._set('con', n >= 3, (v) => this.el.combo.classList.toggle('on', v));
+    if (n < 3) return;
+    this._set('cn', n, (v) => {
+      this.comboEls.n.textContent = v;
+      this.el.combo.classList.add('bump');
+      clearTimeout(this._cbT);
+      this._cbT = setTimeout(() => this.el.combo.classList.remove('bump'), 90);
+    });
+    this._set('cg', grade, (v) => { this.comboEls.g.textContent = v; });
+    this.comboEls.t.style.width = (timerK * 100).toFixed(0) + '%';
+  }
+
+  perfect() {
+    const p = this.el.perfect;
+    p.classList.add('on');
+    clearTimeout(this._pfT);
+    this._pfT = setTimeout(() => p.classList.remove('on'), 900);
+  }
+
+  // 受击方向（屏幕边缘红弧）
+  damageDir(fromPos, camera) {
+    if (!fromPos) return;
+    const cam = camera.position;
+    const fwd = _p.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const yawCam = Math.atan2(fwd.x, fwd.z);
+    const yawHit = Math.atan2(fromPos.x - cam.x, fromPos.z - cam.z);
+    const ang = -(yawHit - yawCam);
+    const slot = this.dirEls.reduce((a, b) => (a.t < b.t ? a : b));
+    slot.t = performance.now();
+    slot.el.style.transform = `rotate(${ang}rad)`;
+    slot.el.style.transition = 'none';
+    slot.el.style.opacity = '1';
+    void slot.el.offsetWidth;
+    slot.el.style.transition = 'opacity .9s';
+    slot.el.style.opacity = '0';
+  }
+
   // ---------------- 伤害飘字
   damageNumber(pos, text, cls = '') {
+    if (!this.showNumbers && cls !== 'player' && cls !== 'heal') return;
     let el = this.dmgPool.pop();
     if (!el) { el = document.createElement('div'); this.el.dmgs.appendChild(el); }
     el.className = 'dn ' + cls;
@@ -137,21 +198,60 @@ export class HUD {
 
   clearDamageNumbers() { for (const d of this.dmgActive) { d.el.style.display = 'none'; this.dmgPool.push(d.el); } this.dmgActive.length = 0; }
 
-  // ---------------- 首领血条
+  // ---------------- 精英标签（头顶词缀 + 血条）
+  eliteLabels(enemies, camera) {
+    const W = innerWidth, H = innerHeight;
+    let n = 0;
+    for (const e of enemies) {
+      if (!e.alive || e.dying || !e.elite || e.spawnT > 0.3) continue;
+      _p.copy(e.headPos); _p.y += 0.45 * e.scale;
+      const dist = _p.distanceTo(camera.position);
+      if (dist > 30) continue;
+      _p.project(camera);
+      if (_p.z > 1 || Math.abs(_p.x) > 1.1 || Math.abs(_p.y) > 1.1) continue;
+      let L = this.labelPool[n];
+      if (!L) {
+        const el = document.createElement('div');
+        el.className = 'el';
+        el.innerHTML = '<span></span><i><b></b></i>';
+        this.el.elabels.appendChild(el);
+        L = this.labelPool[n] = { el, span: el.querySelector('span'), bar: el.querySelector('i'), fill: el.querySelector('b'), key: '' };
+      }
+      n++;
+      if (L.key !== e.label) { L.key = e.label; L.span.textContent = e.label; L.el.style.color = hex(AFFIXES[e.affixes[0]]?.color ?? 0xffc080); }
+      L.el.style.display = 'block';
+      L.el.style.transform = `translate(${((_p.x * 0.5 + 0.5) * W).toFixed(0)}px,${((-_p.y * 0.5 + 0.5) * H).toFixed(0)}px) translate(-50%,-100%) scale(${Math.max(0.7, 1.25 - dist / 40).toFixed(2)})`;
+      L.el.style.left = '0'; L.el.style.top = '0';
+      const warded = e.ward > 0;
+      L.bar.classList.toggle('w', warded);
+      L.fill.style.width = ((warded ? e.ward / e.wardMax : e.hp / e.maxHp) * 100).toFixed(0) + '%';
+    }
+    for (let i = n; i < this.labelPool.length; i++) this.labelPool[i].el.style.display = 'none';
+  }
+
+  // ---------------- 首领血条（阶段刻度 + 破绽槽）
   setBosses(list) {
     this.el.bosses.innerHTML = '';
     this._bossEls = list.map((b) => {
       const d = document.createElement('div');
       d.className = 'boss';
-      d.innerHTML = `<div class="bn">${b.cfg.name} · ${b.cfg.title}</div><div class="bb"><div class="bf"></div></div>`;
+      const ticks = (b.cfg.phases || []).map((p) => `<div class="tick" style="left:${(p * 100).toFixed(1)}%"></div>`).join('');
+      d.innerHTML = `<div class="bn">${b.cfg.name} · ${b.cfg.title}</div><div class="bb"><div class="bl"></div><div class="bf"></div>${ticks}</div>${b.postureMax ? '<div class="bp"><div class="bpf"></div></div><div class="bpl">破 绽</div>' : ''}`;
       this.el.bosses.appendChild(d);
-      return { b, fill: d.querySelector('.bf'), d };
+      return { b, fill: d.querySelector('.bf'), lag: d.querySelector('.bl'), post: d.querySelector('.bpf'), d };
     });
   }
   updateBosses() {
     for (const x of this._bossEls) {
       const k = Math.max(0, x.b.hp / x.b.maxHp);
-      x.fill.style.width = (k * 100).toFixed(1) + '%';
+      const w = (k * 100).toFixed(1) + '%';
+      x.fill.style.width = w;
+      x.lag.style.width = w;
+      if (x.post) {
+        const stag = x.b.staggerT > 0;
+        x.d.classList.toggle('stag', stag);
+        x.post.style.width = stag ? (Math.min(1, x.b.staggerT / 4.2) * 100).toFixed(0) + '%' : (Math.min(1, x.b.posture / x.b.postureMax) * 100).toFixed(0) + '%';
+      }
       if (!x.b.alive || x.b.dying) x.d.style.opacity = '0.3';
     }
   }
@@ -174,23 +274,30 @@ export class HUD {
       if (d > R - 4) { px *= (R - 4) / d; py *= (R - 4) / d; r *= 0.7; }
       g.fillStyle = color; g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.fill();
     };
-    for (const it of pickups) plot(it.obj.position.x, it.obj.position.z, it.kind === 'chest' ? '#ffd060' : '#60ff90', 3.5);
+    for (const it of pickups) plot(it.obj.position.x, it.obj.position.z, it.kind === 'chest' ? '#ffd060' : it.kind === 'scroll' ? '#ffffff' : '#60ff90', 3.5);
     for (const e of enemies) {
       if (!e.alive || e.dying) continue;
-      plot(e.root.position.x, e.root.position.z, e.boss ? '#ff3020' : e.elite ? '#ff9a40' : 'rgba(255,90,70,.85)', e.boss ? 5 : 2.2);
+      plot(e.root.position.x, e.root.position.z, e.boss ? '#ff3020' : e.elite ? '#ff9a40' : e.lost ? 'rgba(120,180,255,.7)' : 'rgba(255,90,70,.85)', e.boss ? 5 : 2.2);
     }
     g.fillStyle = '#ffe8b0';
     g.beginPath(); g.moveTo(0, -7); g.lineTo(5, 5); g.lineTo(0, 2); g.lineTo(-5, 5); g.closePath(); g.fill();
     g.restore();
   }
 
-  banner(title, sub = '', dur = 2400) {
+  // queue: 若当前有横幅在显示，则排队等它结束（残卷、成就之类不必抢占首领阶段 / 尸潮等紧急提示）
+  banner(title, sub = '', dur = 2400, { queue = false } = {}) {
+    if (queue && performance.now() < (this._bUntil || 0)) { (this._bQ ||= []).push([title, sub, dur]); return; }
     const b = this.el.banner;
     b.querySelector('.bt').textContent = title;
     b.querySelector('.bs').textContent = sub;
     b.style.opacity = '1';
+    this._bUntil = performance.now() + dur;
     clearTimeout(this._bT);
-    this._bT = setTimeout(() => { b.style.opacity = '0'; }, dur);
+    this._bT = setTimeout(() => {
+      b.style.opacity = '0';
+      // 出队放在真正显示时，被紧急横幅抢占也不会丢
+      if (this._bQ?.length) this._bT = setTimeout(() => { const n = this._bQ.shift(); if (n) this.banner(...n); }, 500);
+    }, dur);
   }
 
   toast(text, dur = 1800) {
