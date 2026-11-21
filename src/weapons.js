@@ -70,7 +70,8 @@ export class WeaponSystem {
     this.stats = { gunDmg: 1, fireRate: 1, reloadMult: 1, crit: 0, headMult: 1 };
 
     this.flashLight = new THREE.PointLight(0xffb050, 0, 7, 2);
-    camera.add(this.flashLight);
+    this.rig.add(this.flashLight);
+    this.aimObj = null;      // VR：由手柄决定射击原点与方向
     this.flashLight.position.set(0.2, -0.12, -0.9);
     const cv = document.createElement('canvas');
     cv.width = cv.height = 128;
@@ -282,11 +283,13 @@ export class WeaponSystem {
   }
 
   _fire(d, view, muzzleWorld) {
-    const cam = this.camera;
+    const cam = this.aimObj || this.camera;
     const origin = cam.getWorldPosition(new THREE.Vector3());
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+    const aq = this.aimObj ? cam.getWorldQuaternion(new THREE.Quaternion()) : cam.quaternion;
+    const rigM = this.rig.matrixWorld;
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(aq);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(aq);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(aq);
     const pellets = d.pellets || 1;
     const spread = d.spread * (this.moving ? 1.5 : 1) * (d.spinUp ? 1 : 1);
     for (let i = 0; i < pellets; i++) {
@@ -310,10 +313,10 @@ export class WeaponSystem {
       this.flashSprite.material.rotation = Math.random() * Math.PI;
       this.flashSprite.visible = true;
       this.flashLight.position.copy(mp);
-      this.lastMuzzle = mp.clone().applyMatrix4(cam.matrixWorld);
+      this.lastMuzzle = mp.clone().applyMatrix4(rigM);
       if (d.flash > 0) this.effects.gunSmoke(this.lastMuzzle, fwd, d.pellets ? 1.8 : 1, 0.1);
       // 抛壳
-      const ej = vm.position.clone().add(new THREE.Vector3(0.03, 0.04, -0.05)).applyMatrix4(cam.matrixWorld);
+      const ej = vm.position.clone().add(new THREE.Vector3(0.03, 0.04, -0.05)).applyMatrix4(rigM);
       const vel = right.clone().multiplyScalar(1.4 + Math.random()).addScaledVector(up, 1.6 + Math.random() * 0.8).addScaledVector(fwd, -0.3);
       if (!d.pellets || Math.random() < 0.5) this.effects.casing(ej, vel);
     } else if (muzzleWorld) {

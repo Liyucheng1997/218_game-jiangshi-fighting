@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { LITE } from './lite.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getAtlas, getDamask, ATLAS_W, ATLAS_H } from './textures.js';
 
@@ -118,12 +119,13 @@ function patchUber(material, perMat) {
 let _base = null;
 export function baseMaterials() {
   if (_base) return _base;
-  const body = patchUber(new THREE.MeshStandardMaterial({
-    vertexColors: true, map: getDamask(), side: THREE.DoubleSide, roughness: 0.8, metalness: 0,
-  }), makeUberUniforms());
-  const decal = patchUber(new THREE.MeshStandardMaterial({
-    vertexColors: true, map: getAtlas(), side: THREE.DoubleSide, alphaTest: 0.35, roughness: 0.7,
-  }), makeUberUniforms());
+  // 一体机头显（LITE）：角色直接用 Lambert —— uber 补丁挂的都是两种材质共有的着色器片段
+  const body = patchUber(LITE
+    ? new THREE.MeshLambertMaterial({ vertexColors: true, map: getDamask(), side: THREE.DoubleSide })
+    : new THREE.MeshStandardMaterial({ vertexColors: true, map: getDamask(), side: THREE.DoubleSide, roughness: 0.8, metalness: 0 }), makeUberUniforms());
+  const decal = patchUber(LITE
+    ? new THREE.MeshLambertMaterial({ vertexColors: true, map: getAtlas(), side: THREE.DoubleSide, alphaTest: 0.35 })
+    : new THREE.MeshStandardMaterial({ vertexColors: true, map: getAtlas(), side: THREE.DoubleSide, alphaTest: 0.35, roughness: 0.7 }), makeUberUniforms());
   _base = { body, decal };
   return _base;
 }

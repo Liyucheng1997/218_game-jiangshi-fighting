@@ -77,6 +77,28 @@ npm run build      # 打包到 dist/
 | V | Back | 第一 / 第三人称 |
 | Esc | Start | 暂停（对白中：空格继续 / Esc 跳过） |
 
+## VR 版（WebXR · 头显 APK）
+
+游戏内置 VR 模式：支持 WebXR 的头显浏览器（PICO / Quest 等）打开后，主菜单会出现「进入 VR」。第一人称，右手持枪、左手掷符，菜单 / 选卡 / 结算是悬在面前的面板，用手柄射线点选。
+
+| 手柄 | 功能 |
+| --- | --- |
+| 右手 扳机 / 握键 | 开枪、挥剑（枪口朝哪打哪）/ 换弹 |
+| 右手 摇杆 ←→ / ↑↓ | 分段转身 / 切换武器 |
+| 右手 A / B / 按下摇杆 | 跳 / 罡步冲刺 / 重置站位与高度 |
+| 左手 摇杆（按下疾跑） | 移动，方向跟随头部 |
+| 左手 扳机 / 握键 | 掷火符（朝左手所指）/ 按住闭气 |
+| 左手 X / Y | 天师降魔 / 暂停 |
+
+打包成头显 APK（需要 Android SDK build-tools 与 JDK 17，路径见 `tools/build-vr-apk.mjs` 顶部）：
+
+```bash
+npm run apk:vr              # 产物：vr-apk/out/zombie-strike-vr-<版本>.apk
+npm run apk:vr -- --install # 顺便 adb 安装到已连接的头显
+```
+
+APK 是一个启动器：游戏文件打在包内，由一个只监听本机回环地址的小服务提供（WebXR 要求安全来源，`http://localhost` 符合），再交给头显自带浏览器以沉浸模式运行，不需要联网。桌面调试 VR 逻辑可用 `npm run dev` 后打开 `/?xremu`（IWER 模拟头显）。
+
 ## 技术要点
 
 - **画面**

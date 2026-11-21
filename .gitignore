@@ -1,3 +1,6 @@
 node_modules/
 dist/
 .captures/
+vr-apk/build/
+vr-apk/out/
+*.keystore

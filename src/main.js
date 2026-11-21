@@ -25,6 +25,7 @@ import { Cinematic } from './cinematic.js';
 import { Achievements, ACHIEVEMENTS } from './achievements.js';
 import { SCENES, BARKS, SCROLLS, TIPS, EPIGRAPH, CREDITS } from './story.js';
 import { GamepadInput } from './gamepad.js';
+import { VRMode } from './vr.js';
 
 installHeightFog();
 
@@ -93,6 +94,7 @@ class Game {
     this.cine = new Cinematic(this.camera);
     this.achv = new Achievements(this.progress);
     this.pad = new GamepadInput(this);
+    this.vr = new VRMode(this);
     this.effects.setViewportHeight(innerHeight);
     this.pickups.setViewportHeight(innerHeight);
 
@@ -371,10 +373,13 @@ class Game {
     this.camera.updateProjectionMatrix();
     this.hud.showNumbers = S.dmgNums !== false;
     this.effects.gore = S.gore !== false;
-    const q = QUALITY[S.quality] ? S.quality : 'high';
-    const Q = QUALITY[q];
+    const vr = !!this.vr?.wantVR;
+    const q = vr ? 'vr' : QUALITY[S.quality] ? S.quality : 'high';
+    const Q = vr ? { ...QUALITY.vr, shadows: this.vr.shadows ? 1024 : 0 } : QUALITY[q];
     const ratio = Math.min(devicePixelRatio || 1, Q.ratio);
-    this.renderer.setPixelRatio(ratio);
+    const presenting = this.renderer.xr.isPresenting;
+    if (vr) this.hud.showNumbers = false;
+    if (!presenting) this.renderer.setPixelRatio(ratio);
     this.renderer.shadowMap.enabled = Q.shadows > 0;
     this.world.moon.castShadow = Q.shadows > 0;
     if (Q.shadows) {
@@ -383,6 +388,7 @@ class Game {
     }
     if (this.world.moon.shadow.map) { this.world.moon.shadow.map.dispose(); this.world.moon.shadow.map = null; }
     this.postfx.setQuality(q);
+    if (presenting) return;
     this.postfx.setPixelRatio(ratio);
     this.postfx.setSize(innerWidth, innerHeight);
   }
@@ -602,6 +608,7 @@ class Game {
 
   lock() {
     if (TEST) { this.player.locked = true; return; }
+    if (this.vr.active) return;
     const p = this.renderer.domElement.requestPointerLock?.();
     if (p?.catch) p.catch(() => { if (this.state === 'playing') $('click-hint').classList.remove('hidden'); });
   }
@@ -962,7 +969,7 @@ class Game {
     const vm = this.weapons.viewmodels[this.weapons.current];
     if (!vm) return origin.clone().addScaledVector(dir, 0.6);
     const mp = vm.userData.muzzle.clone().applyEuler(vm.rotation).add(vm.position);
-    return mp.applyMatrix4(this.camera.matrixWorld);
+    return mp.applyMatrix4(this.weapons.rig.matrixWorld);
   }
 
   bloodFx(e, p, dir, died) {
@@ -1371,6 +1378,7 @@ class Game {
 
   bindInput() {
     addEventListener('resize', () => {
+      if (this.renderer.xr.isPresenting) return;
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(innerWidth, innerHeight);
@@ -1460,6 +1468,8 @@ class Game {
   }
 
   throwFu() {
+    const ray = this.vr.active ? this.vr.handRay('left') : null;
+    if (ray) { if (this.skills.throwTalisman(ray.origin, ray.dir)) this.priest.cast(); return; }
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
     const origin = this.view === 'fps' ? this.camera.getWorldPosition(new THREE.Vector3()) : this.player.position.clone().add(new THREE.Vector3(0, -0.2, 0));
     if (this.skills.throwTalisman(origin, dir)) this.priest.cast();
@@ -1479,6 +1489,7 @@ class Game {
     this.cine.update(rawDt);
     this.updateSetPieces(rawDt);
     this.pad.poll(rawDt);
+    this.vr.preUpdate(rawDt);
     this.perfectCd = Math.max(0, (this.perfectCd || 0) - rawDt);
 
     const st = this.state;
@@ -1524,6 +1535,7 @@ class Game {
     this.hurt = Math.max(0, this.hurt - rawDt * 2.5);
     UBER_SHARED.uMoonView.value.copy(MOON_DIR).transformDirection(this.camera.matrixWorldInverse);
     this.postfx.u.hurt.value = this.hurt * 0.8 + (st === 'playing' && this.player.hp / this.player.maxHp < 0.3 ? 0.25 : 0);
+    this.vr.postUpdate(rawDt);
     this.postfx.u.desat.value = st === 'dying' ? Math.min(0.85, this.dyingT) : this.player.holding && st === 'playing' ? 0.35 : 0;
     this.postfx.render(this.scene, this.camera, rawDt);
   }
@@ -1592,7 +1604,7 @@ class Game {
 
     if (this.priest.swingT >= 0) { this.priest.swingT += dt / 0.3; if (this.priest.swingT >= 1) this.priest.swingT = -1; }
     this.priest.update(dt, { pos: P.position, yaw: P.yaw, pitch: P.pitch, vel: P.velocity, running: P.isRunning, swingT: this.priest.swingT ?? -1, dashing: P.dashing });
-    W.setMoveState(P.moving, P.isRunning);
+    W.setMoveState(P.moving && !this.vr.active, P.isRunning && !this.vr.active);
     W.update(dt, true, this.view, () => this.priest.muzzleWorld());
     this.skills.update(dt, P);
     this._burning = false;
@@ -1693,6 +1705,15 @@ class Game {
     }
     if (W.recoilKick > 0 && !dying) { P.pitch += W.recoilKick * dt * 6; P.yaw += (W.recoilYaw || 0) * dt * 6; }
   }
+}
+
+// 开发用：?xremu 在桌面浏览器里模拟一台 VR 头显（IWER），用来调试 VR 模式
+if (import.meta.env.DEV && new URLSearchParams(location.search).has('xremu')) {
+  const { XRDevice, metaQuest3 } = await import('iwer');
+  const dev = new XRDevice(metaQuest3);
+  dev.installRuntime({ forceInstall: true });
+  dev.position.set(0, 1.7, 0);
+  window.xrdev = dev;
 }
 
 window.game = new Game();

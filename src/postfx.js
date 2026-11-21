@@ -141,6 +141,7 @@ const GradeShader = {
 };
 
 export const QUALITY = {
+  vr: { ratio: 1, shadows: 0, msaa: 0, bloom: false, rays: false, post: false },
   low: { ratio: 0.75, shadows: 0, msaa: 0, bloom: false, rays: false, post: false },
   medium: { ratio: 1, shadows: 1024, msaa: 2, bloom: true, rays: false, post: true },
   high: { ratio: 1.5, shadows: 2048, msaa: 4, bloom: true, rays: true, post: true },

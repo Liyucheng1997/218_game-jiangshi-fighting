@@ -759,6 +759,7 @@ export class World {
     }
     lg.position.set(x, y, z);
     lg.userData.dynamic = true;
+    lg.userData.rigid = true;     // 整体摇摆、内部不动：VR 下可把子网格合并
     parent.add(lg);
     const seed = Math.random() * 10;
     this.animated.push({ update: (dt, t) => { lg.rotation.z = Math.sin(t * 1.3 + seed) * 0.06; lg.rotation.x = Math.sin(t * 0.9 + seed) * 0.04; } });
